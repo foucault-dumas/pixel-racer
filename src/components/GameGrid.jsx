@@ -1,4 +1,3 @@
-import { useState } from 'react'
 const GameGrid = () => {
   // État pour stocker la taille de la grille
   const gridSize = {
