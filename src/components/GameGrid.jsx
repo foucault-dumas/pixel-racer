@@ -99,6 +99,7 @@ export default function GameGrid() {
   // finishLine: { r1, c1, r2, c2 } in grid-node coordinates, or null
   // Grid node (r, c) is at pixel (c * cellSize, r * cellSize) — the intersection of grid lines.
   const [finishLine, setFinishLine] = useState(null);
+  const [playerCount, setPlayerCount] = useState(2);
   const [manualCellSize, setManualCellSize] = useState(null);
   const [containerSize, setContainerSize] = useState({ w: 900, h: 500 });
 
@@ -245,6 +246,21 @@ export default function GameGrid() {
           >{isAuto ? 'auto' : `${zoomPct}%`}</button>
           <button onClick={zoomIn} className="w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-white text-base leading-none" title="Zoomer">+</button>
         </div>
+        {/* Player count */}
+        <div className="flex items-center gap-1 border-l border-gray-700 pl-3">
+          <span className="text-xs text-gray-400 mr-1">Joueurs</span>
+          {[2, 3, 4, 5, 6].map(n => (
+            <button
+              key={n}
+              onClick={() => setPlayerCount(n)}
+              className={`w-7 h-7 rounded text-sm font-bold transition-all
+                ${playerCount === n
+                  ? 'bg-violet-500 text-white scale-110'
+                  : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'}`}
+            >{n}</button>
+          ))}
+        </div>
+
         <button
           onClick={() => { setGrid(createGrid()); setFinishLine(null); setTool(OUTER); setManualCellSize(null); }}
           className="px-3 py-1.5 rounded text-white text-sm font-medium bg-red-800 opacity-50 hover:opacity-80"
