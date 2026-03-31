@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useMemo } from 'react';
+import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 
 const ROWS = 24;
 const COLS = 40;
@@ -97,15 +97,43 @@ const STATUS = {
 export default function GameGrid() {
   const [grid, setGrid] = useState(createGrid);
   const [tool, setTool] = useState(OUTER);
+  const [widthError, setWidthError] = useState(false);
   const painting = useRef(false);
+  const gridRef = useRef(grid);
+  const errorTimer = useRef(null);
+
+  useEffect(() => { gridRef.current = grid; }, [grid]);
+
+  // Returns true if placing `type` at (r,c) would violate the 3-cell minimum width rule.
+  // We require distance² ≥ 16 (distance ≥ 4) between opposite border cells,
+  // which guarantees at least 3 track cells between them in a straight section.
+  const violatesMinWidth = useCallback((r, c, type) => {
+    const opposite = type === OUTER ? INNER : OUTER;
+    const g = gridRef.current;
+    for (let nr = 0; nr < ROWS; nr++)
+      for (let nc = 0; nc < COLS; nc++)
+        if (g[nr][nc] === opposite && (nr - r) ** 2 + (nc - c) ** 2 < 16)
+          return true;
+    return false;
+  }, []);
+
+  const triggerWidthError = useCallback(() => {
+    setWidthError(true);
+    clearTimeout(errorTimer.current);
+    errorTimer.current = setTimeout(() => setWidthError(false), 3000);
+  }, []);
 
   const paint = useCallback((r, c) => {
+    if ((tool === OUTER || tool === INNER) && violatesMinWidth(r, c, tool)) {
+      triggerWidthError();
+      return;
+    }
     setGrid(prev => {
       const next = prev.map(row => [...row]);
       next[r][c] = tool === 'eraser' ? null : tool;
       return next;
     });
-  }, [tool]);
+  }, [tool, violatesMinWidth, triggerWidthError]);
 
   const placeFinishLine = useCallback((clickR, clickC) => {
     setGrid(prev => {
@@ -215,6 +243,13 @@ export default function GameGrid() {
             </div>
           );
         })}
+      </div>
+
+      {/* Width violation message */}
+      <div className={`mb-3 overflow-hidden transition-all duration-300 ${widthError ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'}`}>
+        <div className="px-3 py-2 rounded bg-amber-900/50 border border-amber-500/40 text-amber-200 text-sm">
+          🏎️ <strong>Trop serré !</strong> Il faut au moins <strong>3 cases</strong> entre les deux bords pour que les voitures puissent manœuvrer. Éloigne un peu ce bord de l'autre.
+        </div>
       </div>
 
       {/* Grid */}
