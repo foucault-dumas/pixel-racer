@@ -4,7 +4,6 @@ const ROWS = 40;
 const COLS = 64;
 const OUTER = 'outer';
 const INNER = 'inner';
-const FINISH = 'finish';
 const MIN_CELL = 6;
 const MAX_CELL = 48;
 const ZOOM_STEP = 3;
@@ -81,9 +80,8 @@ function nearestOfType(grid, type, r, c) {
 }
 
 const CELL_BG = {
-  [OUTER]:  'bg-orange-500',
-  [INNER]:  'bg-blue-500',
-  [FINISH]: 'bg-emerald-400',
+  [OUTER]: 'bg-orange-500',
+  [INNER]: 'bg-blue-500',
 };
 
 const STATUS = {
@@ -98,7 +96,9 @@ export default function GameGrid() {
   const [grid, setGrid] = useState(createGrid);
   const [tool, setTool] = useState(OUTER);
   const [widthError, setWidthError] = useState(false);
-  // null = auto-fit; number = manual override in px
+  // finishLine: { r1, c1, r2, c2 } in grid-node coordinates, or null
+  // Grid node (r, c) is at pixel (c * cellSize, r * cellSize) — the intersection of grid lines.
+  const [finishLine, setFinishLine] = useState(null);
   const [manualCellSize, setManualCellSize] = useState(null);
   const [containerSize, setContainerSize] = useState({ w: 900, h: 500 });
 
@@ -158,29 +158,26 @@ export default function GameGrid() {
     });
   }, [tool, violatesMinWidth, triggerWidthError]);
 
+  // Place the finish line as a segment between grid nodes.
+  // Uses the top-left corner of each border cell as the node coordinate,
+  // giving a line that lies exactly on grid edges.
   const placeFinishLine = useCallback((clickR, clickC) => {
-    setGrid(prev => {
-      const outerCell = nearestOfType(prev, OUTER, clickR, clickC);
-      const innerCell = nearestOfType(prev, INNER, clickR, clickC);
-      if (!outerCell || !innerCell) return prev;
-      const line = bresenham(outerCell[0], outerCell[1], innerCell[0], innerCell[1]);
-      const next = prev.map(row => [...row]);
-      for (let r = 0; r < ROWS; r++)
-        for (let c = 0; c < COLS; c++)
-          if (next[r][c] === FINISH) next[r][c] = null;
-      line.forEach(([r, c]) => {
-        if (next[r][c] !== OUTER && next[r][c] !== INNER) next[r][c] = FINISH;
-      });
-      return next;
+    const g = gridRef.current;
+    const outerCell = nearestOfType(g, OUTER, clickR, clickC);
+    const innerCell = nearestOfType(g, INNER, clickR, clickC);
+    if (!outerCell || !innerCell) return;
+    setFinishLine({
+      r1: outerCell[0], c1: outerCell[1],
+      r2: innerCell[0], c2: innerCell[1],
     });
   }, []);
 
   const onMouseDown = (r, c) => {
     painting.current = true;
-    if (tool === FINISH) placeFinishLine(r, c);
+    if (tool === 'finish') placeFinishLine(r, c);
     else paint(r, c);
   };
-  const onMouseEnter = (r, c) => { if (painting.current && tool !== FINISH) paint(r, c); };
+  const onMouseEnter = (r, c) => { if (painting.current && tool !== 'finish') paint(r, c); };
   const stopPainting = () => { painting.current = false; };
 
   const outerInfo = useMemo(() => analyzeBorder(grid, OUTER), [grid]);
@@ -202,17 +199,20 @@ export default function GameGrid() {
   const toolDefs = [
     { id: OUTER,    label: 'Bord extérieur', bg: 'bg-orange-500' },
     { id: INNER,    label: 'Bord intérieur',  bg: 'bg-blue-500' },
-    { id: FINISH,   label: "Ligne d'arrivée", bg: 'bg-emerald-500', disabled: !bothClosed },
+    { id: 'finish', label: "Ligne d'arrivée", bg: 'bg-emerald-500', disabled: !bothClosed },
     { id: 'eraser', label: 'Effacer',          bg: 'bg-gray-600' },
   ];
 
   const borderDefs = [
-    { type: OUTER, label: 'Bord ext.',  labelCls: 'text-orange-400', info: outerInfo },
-    { type: INNER, label: 'Bord int.',  labelCls: 'text-blue-400',   info: innerInfo },
+    { type: OUTER, label: 'Bord ext.', labelCls: 'text-orange-400', info: outerInfo },
+    { type: INNER, label: 'Bord int.', labelCls: 'text-blue-400',   info: innerInfo },
   ];
 
   const isAuto = manualCellSize === null;
   const zoomPct = Math.round((cellSize / baseCellSize) * 100);
+
+  // Finish line stroke width scales with cell size, min 2px
+  const finishStroke = Math.max(2, Math.round(cellSize / 6));
 
   return (
     <div
@@ -236,31 +236,19 @@ export default function GameGrid() {
           </button>
         ))}
         <div className="ml-auto flex items-center gap-1">
-          <button
-            onClick={zoomOut}
-            className="w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-white text-base leading-none"
-            title="Dézoomer"
-          >−</button>
+          <button onClick={zoomOut} className="w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-white text-base leading-none" title="Dézoomer">−</button>
           <button
             onClick={fitScreen}
             className={`px-2 h-7 rounded text-xs font-mono transition-colors
               ${isAuto ? 'bg-gray-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}
             title="Adapter à l'écran"
-          >
-            {isAuto ? 'auto' : `${zoomPct}%`}
-          </button>
-          <button
-            onClick={zoomIn}
-            className="w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-white text-base leading-none"
-            title="Zoomer"
-          >+</button>
+          >{isAuto ? 'auto' : `${zoomPct}%`}</button>
+          <button onClick={zoomIn} className="w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-white text-base leading-none" title="Zoomer">+</button>
         </div>
         <button
-          onClick={() => { setGrid(createGrid()); setTool(OUTER); setManualCellSize(null); }}
+          onClick={() => { setGrid(createGrid()); setFinishLine(null); setTool(OUTER); setManualCellSize(null); }}
           className="px-3 py-1.5 rounded text-white text-sm font-medium bg-red-800 opacity-50 hover:opacity-80"
-        >
-          Réinitialiser
-        </button>
+        >Réinitialiser</button>
       </div>
 
       {/* Border status */}
@@ -272,10 +260,7 @@ export default function GameGrid() {
               <span className={`font-medium ${labelCls}`}>{label} :</span>
               <span className={s.cls}>{s.label}</span>
               {info.state === 'open' && (
-                <button
-                  onClick={() => closeBorder(type)}
-                  className="px-2 py-0.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-white"
-                >Fermer</button>
+                <button onClick={() => closeBorder(type)} className="px-2 py-0.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-white">Fermer</button>
               )}
               {info.state === 'branched' && (
                 <span className="text-xs text-gray-500">(simplifiez)</span>
@@ -293,32 +278,57 @@ export default function GameGrid() {
       </div>
 
       {/* Scrollable grid container */}
-      <div
-        ref={containerRef}
-        className="flex-1 min-h-0 overflow-auto rounded bg-gray-950"
-      >
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${COLS}, ${cellSize}px)`,
-            gridTemplateRows: `repeat(${ROWS}, ${cellSize}px)`,
-            width: cellSize * COLS,
-            height: cellSize * ROWS,
-          }}
-        >
-          {Array.from({ length: ROWS * COLS }, (_, i) => {
-            const r = Math.floor(i / COLS), c = i % COLS;
-            const type = grid[r][c];
-            return (
-              <div
-                key={i}
-                className={`border border-gray-800/40 cursor-crosshair
-                  ${CELL_BG[type] ?? 'hover:bg-gray-700/50'}`}
-                onMouseDown={() => onMouseDown(r, c)}
-                onMouseEnter={() => onMouseEnter(r, c)}
-              />
-            );
-          })}
+      <div ref={containerRef} className="flex-1 min-h-0 overflow-auto rounded bg-gray-950">
+        {/* Relative wrapper so the SVG overlay aligns with the grid */}
+        <div style={{ position: 'relative', width: cellSize * COLS, height: cellSize * ROWS }}>
+
+          {/* Cell grid */}
+          <div
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${COLS}, ${cellSize}px)`,
+              gridTemplateRows: `repeat(${ROWS}, ${cellSize}px)`,
+            }}
+          >
+            {Array.from({ length: ROWS * COLS }, (_, i) => {
+              const r = Math.floor(i / COLS), c = i % COLS;
+              const type = grid[r][c];
+              return (
+                <div
+                  key={i}
+                  className={`border border-gray-800/40 cursor-crosshair
+                    ${CELL_BG[type] ?? 'hover:bg-gray-700/50'}`}
+                  onMouseDown={() => onMouseDown(r, c)}
+                  onMouseEnter={() => onMouseEnter(r, c)}
+                />
+              );
+            })}
+          </div>
+
+          {/* SVG overlay — finish line & future car trajectories live here */}
+          <svg
+            style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
+            width={cellSize * COLS}
+            height={cellSize * ROWS}
+          >
+            {finishLine && (
+              <g>
+                <line
+                  x1={finishLine.c1 * cellSize}
+                  y1={finishLine.r1 * cellSize}
+                  x2={finishLine.c2 * cellSize}
+                  y2={finishLine.r2 * cellSize}
+                  stroke="#34d399"
+                  strokeWidth={finishStroke}
+                  strokeLinecap="round"
+                />
+                {/* Endpoint dots to mark the grid nodes */}
+                <circle cx={finishLine.c1 * cellSize} cy={finishLine.r1 * cellSize} r={finishStroke} fill="#34d399" />
+                <circle cx={finishLine.c2 * cellSize} cy={finishLine.r2 * cellSize} r={finishStroke} fill="#34d399" />
+              </g>
+            )}
+          </svg>
+
         </div>
       </div>
 
