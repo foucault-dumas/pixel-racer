@@ -1,53 +1,209 @@
-const GameGrid = () => {
-  // État pour stocker la taille de la grille
-  const gridSize = {
-    rows: 20,
-    cols: 30
-  };
+import { useState, useRef, useCallback, useMemo } from 'react';
 
-  // Création de la grille comme un tableau 2D
-  const createGrid = () => {
-    return Array(gridSize.rows).fill().map(() => 
-      Array(gridSize.cols).fill(null)
-    );
-  };
+const ROWS = 24;
+const COLS = 40;
+const OUTER = 'outer';
+const INNER = 'inner';
+const FINISH = 'finish';
 
-  return (
-    <div className="w-full max-w-4xl mx-auto p-4">
-      {/* En-tête du composant */}
-      <h2 className="text-2xl font-bold mb-4">Pixel Racer</h2>
-      
-      {/* Container de la grille avec un rapport hauteur/largeur fixe */}
-      <div className="w-full aspect-[3/2] bg-gray-100 border border-gray-300 rounded-lg overflow-hidden">
-        {/* Grille de jeu */}
-        <div className="grid h-full" 
-             style={{
-               gridTemplateRows: `repeat(${gridSize.rows}, 1fr)`,
-               gridTemplateColumns: `repeat(${gridSize.cols}, 1fr)`
-             }}>
-          {createGrid().map((row, rowIndex) => 
-            row.map((cell, colIndex) => (
-              <div
-                key={`${rowIndex}-${colIndex}`}
-                className="border border-gray-200 hover:bg-gray-200 transition-colors"
-                // Nous ajouterons ici les gestionnaires d'événements pour le tracé de la piste
-              />
-            ))
-          )}
-        </div>
-      </div>
-      
-      {/* Contrôles de base */}
-      <div className="mt-4 flex gap-4">
-        <button 
-          className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition-colors"
-          onClick={() => {/* Ajout futur : démarrer une nouvelle partie */}}
-        >
-          Nouvelle Partie
-        </button>
-      </div>
-    </div>
+const createGrid = () => Array.from({ length: ROWS }, () => Array(COLS).fill(null));
+
+function bresenham(r0, c0, r1, c1) {
+  const pts = [];
+  let dr = Math.abs(r1 - r0), dc = Math.abs(c1 - c0);
+  let sr = r0 < r1 ? 1 : -1, sc = c0 < c1 ? 1 : -1;
+  let err = dr - dc, r = r0, c = c0;
+  for (;;) {
+    pts.push([r, c]);
+    if (r === r1 && c === c1) break;
+    const e2 = 2 * err;
+    if (e2 > -dc) { err -= dc; r += sr; }
+    if (e2 < dr) { err += dr; c += sc; }
+  }
+  return pts;
+}
+
+function neighbors8(r, c) {
+  const ns = [];
+  for (let dr = -1; dr <= 1; dr++)
+    for (let dc = -1; dc <= 1; dc++) {
+      if (!dr && !dc) continue;
+      const nr = r + dr, nc = c + dc;
+      if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) ns.push([nr, nc]);
+    }
+  return ns;
+}
+
+function analyzeBorder(grid, type) {
+  const cells = [];
+  for (let r = 0; r < ROWS; r++)
+    for (let c = 0; c < COLS; c++)
+      if (grid[r][c] === type) cells.push([r, c]);
+
+  if (cells.length === 0) return { state: 'empty' };
+
+  // Connectivity check (BFS)
+  const visited = new Set();
+  const queue = [cells[0]];
+  visited.add(cells[0].join(','));
+  while (queue.length) {
+    const [r, c] = queue.shift();
+    for (const [nr, nc] of neighbors8(r, c)) {
+      const key = `${nr},${nc}`;
+      if (grid[nr][nc] === type && !visited.has(key)) {
+        visited.add(key);
+        queue.push([nr, nc]);
+      }
+    }
+  }
+  if (visited.size !== cells.length) return { state: 'disconnected' };
+
+  // Endpoints: cells with 0 or 1 same-type neighbor
+  const endpoints = cells.filter(([r, c]) =>
+    neighbors8(r, c).filter(([nr, nc]) => grid[nr][nc] === type).length <= 1
   );
+
+  if (endpoints.length === 0) return { state: 'closed' };
+  if (endpoints.length === 2) return { state: 'open', endpoints };
+  return { state: 'branched', endpoints };
+}
+
+const CELL_BG = {
+  [OUTER]: 'bg-orange-500',
+  [INNER]: 'bg-blue-500',
+  [FINISH]: 'bg-emerald-400',
 };
 
-export default GameGrid;
+const STATUS = {
+  empty:        { label: '—',                cls: 'text-gray-500' },
+  closed:       { label: '✓ Fermé',          cls: 'text-emerald-400' },
+  open:         { label: '◌ Ouvert',         cls: 'text-yellow-400' },
+  branched:     { label: '✗ Branches',       cls: 'text-red-400' },
+  disconnected: { label: '✗ Déconnecté',     cls: 'text-red-400' },
+};
+
+export default function GameGrid() {
+  const [grid, setGrid] = useState(createGrid);
+  const [tool, setTool] = useState(OUTER);
+  const painting = useRef(false);
+
+  const paint = useCallback((r, c) => {
+    setGrid(prev => {
+      const next = prev.map(row => [...row]);
+      next[r][c] = tool === 'eraser' ? null : tool;
+      return next;
+    });
+  }, [tool]);
+
+  const onMouseDown = (r, c) => { painting.current = true; paint(r, c); };
+  const onMouseEnter = (r, c) => { if (painting.current) paint(r, c); };
+  const stopPainting = () => { painting.current = false; };
+
+  const outerInfo = useMemo(() => analyzeBorder(grid, OUTER), [grid]);
+  const innerInfo = useMemo(() => analyzeBorder(grid, INNER), [grid]);
+
+  const bothClosed = outerInfo.state === 'closed' && innerInfo.state === 'closed';
+
+  const closeBorder = (type) => {
+    const info = type === OUTER ? outerInfo : innerInfo;
+    if (info.state !== 'open') return;
+    const [[r0, c0], [r1, c1]] = info.endpoints;
+    const line = bresenham(r0, c0, r1, c1);
+    setGrid(prev => {
+      const next = prev.map(row => [...row]);
+      line.forEach(([r, c]) => { next[r][c] = type; });
+      return next;
+    });
+  };
+
+  const tools = [
+    { id: OUTER,    label: 'Bord extérieur',  bg: 'bg-orange-500' },
+    { id: INNER,    label: 'Bord intérieur',   bg: 'bg-blue-500' },
+    { id: FINISH,   label: "Ligne d'arrivée",  bg: 'bg-emerald-500', disabled: !bothClosed },
+    { id: 'eraser', label: 'Effacer',           bg: 'bg-gray-600' },
+  ];
+
+  const borders = [
+    { type: OUTER, label: 'Bord extérieur', labelCls: 'text-orange-400', info: outerInfo },
+    { type: INNER, label: 'Bord intérieur', labelCls: 'text-blue-400',   info: innerInfo },
+  ];
+
+  return (
+    <div
+      className="w-full max-w-5xl mx-auto p-4 select-none"
+      onMouseUp={stopPainting}
+      onMouseLeave={stopPainting}
+    >
+      {/* Toolbar */}
+      <div className="flex flex-wrap items-center gap-2 mb-3">
+        {tools.map(t => (
+          <button
+            key={t.id}
+            disabled={t.disabled}
+            onClick={() => !t.disabled && setTool(t.id)}
+            className={`px-3 py-1.5 rounded text-white text-sm font-medium transition-all
+              ${t.bg}
+              ${tool === t.id ? 'ring-2 ring-white ring-offset-1 ring-offset-gray-950 scale-105' : 'opacity-50 hover:opacity-80'}
+              disabled:cursor-not-allowed disabled:opacity-25`}
+          >
+            {t.label}
+          </button>
+        ))}
+        <button
+          onClick={() => { setGrid(createGrid()); setTool(OUTER); }}
+          className="px-3 py-1.5 rounded text-white text-sm font-medium bg-red-800 opacity-50 hover:opacity-80 ml-auto"
+        >
+          Réinitialiser
+        </button>
+      </div>
+
+      {/* Border status */}
+      <div className="flex flex-wrap gap-6 mb-3 text-sm">
+        {borders.map(({ type, label, labelCls, info }) => {
+          const s = STATUS[info.state];
+          return (
+            <div key={type} className="flex items-center gap-2">
+              <span className={`font-medium ${labelCls}`}>{label} :</span>
+              <span className={s.cls}>{s.label}</span>
+              {info.state === 'open' && (
+                <button
+                  onClick={() => closeBorder(type)}
+                  className="px-2 py-0.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-white"
+                >
+                  Fermer
+                </button>
+              )}
+              {info.state === 'branched' && (
+                <span className="text-xs text-gray-500">(simplifiez le tracé)</span>
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Grid */}
+      <div
+        className="border border-gray-700 w-full"
+        style={{ display: 'grid', gridTemplateColumns: `repeat(${COLS}, 1fr)` }}
+      >
+        {Array.from({ length: ROWS * COLS }, (_, i) => {
+          const r = Math.floor(i / COLS), c = i % COLS;
+          const type = grid[r][c];
+          return (
+            <div
+              key={i}
+              className={`aspect-square border border-gray-800/40 cursor-crosshair
+                ${CELL_BG[type] ?? 'hover:bg-gray-700/50'}`}
+              onMouseDown={() => onMouseDown(r, c)}
+              onMouseEnter={() => onMouseEnter(r, c)}
+            />
+          );
+        })}
+      </div>
+
+      <p className="mt-2 text-xs text-gray-600">
+        Dessinez les bords en cliquant-glissant · "Fermer" relie automatiquement les extrémités · La ligne d'arrivée se débloque quand les deux bords sont fermés
+      </p>
+    </div>
+  );
+}
