@@ -1,10 +1,13 @@
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
 
-const ROWS = 24;
-const COLS = 40;
+const ROWS = 40;
+const COLS = 64;
 const OUTER = 'outer';
 const INNER = 'inner';
 const FINISH = 'finish';
+const MIN_CELL = 6;
+const MAX_CELL = 48;
+const ZOOM_STEP = 3;
 
 const createGrid = () => Array.from({ length: ROWS }, () => Array(COLS).fill(null));
 
@@ -42,7 +45,6 @@ function analyzeBorder(grid, type) {
 
   if (cells.length === 0) return { state: 'empty' };
 
-  // Connectivity check (BFS)
   const visited = new Set();
   const queue = [cells[0]];
   visited.add(cells[0].join(','));
@@ -58,7 +60,6 @@ function analyzeBorder(grid, type) {
   }
   if (visited.size !== cells.length) return { state: 'disconnected' };
 
-  // Endpoints: cells with 0 or 1 same-type neighbor
   const endpoints = cells.filter(([r, c]) =>
     neighbors8(r, c).filter(([nr, nc]) => grid[nr][nc] === type).length <= 1
   );
@@ -68,7 +69,6 @@ function analyzeBorder(grid, type) {
   return { state: 'branched', endpoints };
 }
 
-// Find the cell of `type` closest to (r, c)
 function nearestOfType(grid, type, r, c) {
   let best = null, bestDist = Infinity;
   for (let nr = 0; nr < ROWS; nr++)
@@ -81,32 +81,55 @@ function nearestOfType(grid, type, r, c) {
 }
 
 const CELL_BG = {
-  [OUTER]: 'bg-orange-500',
-  [INNER]: 'bg-blue-500',
+  [OUTER]:  'bg-orange-500',
+  [INNER]:  'bg-blue-500',
   [FINISH]: 'bg-emerald-400',
 };
 
 const STATUS = {
-  empty:        { label: '—',                cls: 'text-gray-500' },
-  closed:       { label: '✓ Fermé',          cls: 'text-emerald-400' },
-  open:         { label: '◌ Ouvert',         cls: 'text-yellow-400' },
-  branched:     { label: '✗ Branches',       cls: 'text-red-400' },
-  disconnected: { label: '✗ Déconnecté',     cls: 'text-red-400' },
+  empty:        { label: '—',             cls: 'text-gray-500' },
+  closed:       { label: '✓ Fermé',       cls: 'text-emerald-400' },
+  open:         { label: '◌ Ouvert',      cls: 'text-yellow-400' },
+  branched:     { label: '✗ Branches',    cls: 'text-red-400' },
+  disconnected: { label: '✗ Déconnecté', cls: 'text-red-400' },
 };
 
 export default function GameGrid() {
   const [grid, setGrid] = useState(createGrid);
   const [tool, setTool] = useState(OUTER);
   const [widthError, setWidthError] = useState(false);
+  // null = auto-fit; number = manual override in px
+  const [manualCellSize, setManualCellSize] = useState(null);
+  const [containerSize, setContainerSize] = useState({ w: 900, h: 500 });
+
   const painting = useRef(false);
   const gridRef = useRef(grid);
   const errorTimer = useRef(null);
+  const containerRef = useRef(null);
 
   useEffect(() => { gridRef.current = grid; }, [grid]);
 
-  // Returns true if placing `type` at (r,c) would violate the 3-cell minimum width rule.
-  // We require distance² ≥ 16 (distance ≥ 4) between opposite border cells,
-  // which guarantees at least 3 track cells between them in a straight section.
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const obs = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect;
+      setContainerSize({ w: width, h: height });
+    });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  const baseCellSize = Math.max(
+    MIN_CELL,
+    Math.floor(Math.min(containerSize.w / COLS, containerSize.h / ROWS))
+  );
+  const cellSize = manualCellSize ?? baseCellSize;
+
+  const zoomIn  = () => setManualCellSize(s => Math.min(MAX_CELL, (s ?? baseCellSize) + ZOOM_STEP));
+  const zoomOut = () => setManualCellSize(s => Math.max(MIN_CELL, (s ?? baseCellSize) - ZOOM_STEP));
+  const fitScreen = () => setManualCellSize(null);
+
   const violatesMinWidth = useCallback((r, c, type) => {
     const opposite = type === OUTER ? INNER : OUTER;
     const g = gridRef.current;
@@ -140,14 +163,11 @@ export default function GameGrid() {
       const outerCell = nearestOfType(prev, OUTER, clickR, clickC);
       const innerCell = nearestOfType(prev, INNER, clickR, clickC);
       if (!outerCell || !innerCell) return prev;
-
       const line = bresenham(outerCell[0], outerCell[1], innerCell[0], innerCell[1]);
       const next = prev.map(row => [...row]);
-      // Clear existing finish line
       for (let r = 0; r < ROWS; r++)
         for (let c = 0; c < COLS; c++)
           if (next[r][c] === FINISH) next[r][c] = null;
-      // Draw new finish line (track cells only, borders stay intact)
       line.forEach(([r, c]) => {
         if (next[r][c] !== OUTER && next[r][c] !== INNER) next[r][c] = FINISH;
       });
@@ -165,7 +185,6 @@ export default function GameGrid() {
 
   const outerInfo = useMemo(() => analyzeBorder(grid, OUTER), [grid]);
   const innerInfo = useMemo(() => analyzeBorder(grid, INNER), [grid]);
-
   const bothClosed = outerInfo.state === 'closed' && innerInfo.state === 'closed';
 
   const closeBorder = (type) => {
@@ -180,27 +199,30 @@ export default function GameGrid() {
     });
   };
 
-  const tools = [
-    { id: OUTER,    label: 'Bord extérieur',  bg: 'bg-orange-500' },
-    { id: INNER,    label: 'Bord intérieur',   bg: 'bg-blue-500' },
-    { id: FINISH,   label: "Ligne d'arrivée",  bg: 'bg-emerald-500', disabled: !bothClosed },
-    { id: 'eraser', label: 'Effacer',           bg: 'bg-gray-600' },
+  const toolDefs = [
+    { id: OUTER,    label: 'Bord extérieur', bg: 'bg-orange-500' },
+    { id: INNER,    label: 'Bord intérieur',  bg: 'bg-blue-500' },
+    { id: FINISH,   label: "Ligne d'arrivée", bg: 'bg-emerald-500', disabled: !bothClosed },
+    { id: 'eraser', label: 'Effacer',          bg: 'bg-gray-600' },
   ];
 
-  const borders = [
-    { type: OUTER, label: 'Bord extérieur', labelCls: 'text-orange-400', info: outerInfo },
-    { type: INNER, label: 'Bord intérieur', labelCls: 'text-blue-400',   info: innerInfo },
+  const borderDefs = [
+    { type: OUTER, label: 'Bord ext.',  labelCls: 'text-orange-400', info: outerInfo },
+    { type: INNER, label: 'Bord int.',  labelCls: 'text-blue-400',   info: innerInfo },
   ];
+
+  const isAuto = manualCellSize === null;
+  const zoomPct = Math.round((cellSize / baseCellSize) * 100);
 
   return (
     <div
-      className="w-full max-w-5xl mx-auto p-4 select-none"
+      className="h-full flex flex-col p-3 gap-2 select-none"
       onMouseUp={stopPainting}
       onMouseLeave={stopPainting}
     >
       {/* Toolbar */}
-      <div className="flex flex-wrap items-center gap-2 mb-3">
-        {tools.map(t => (
+      <div className="shrink-0 flex flex-wrap items-center gap-2">
+        {toolDefs.map(t => (
           <button
             key={t.id}
             disabled={t.disabled}
@@ -213,17 +235,37 @@ export default function GameGrid() {
             {t.label}
           </button>
         ))}
+        <div className="ml-auto flex items-center gap-1">
+          <button
+            onClick={zoomOut}
+            className="w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-white text-base leading-none"
+            title="Dézoomer"
+          >−</button>
+          <button
+            onClick={fitScreen}
+            className={`px-2 h-7 rounded text-xs font-mono transition-colors
+              ${isAuto ? 'bg-gray-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}
+            title="Adapter à l'écran"
+          >
+            {isAuto ? 'auto' : `${zoomPct}%`}
+          </button>
+          <button
+            onClick={zoomIn}
+            className="w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-white text-base leading-none"
+            title="Zoomer"
+          >+</button>
+        </div>
         <button
-          onClick={() => { setGrid(createGrid()); setTool(OUTER); }}
-          className="px-3 py-1.5 rounded text-white text-sm font-medium bg-red-800 opacity-50 hover:opacity-80 ml-auto"
+          onClick={() => { setGrid(createGrid()); setTool(OUTER); setManualCellSize(null); }}
+          className="px-3 py-1.5 rounded text-white text-sm font-medium bg-red-800 opacity-50 hover:opacity-80"
         >
           Réinitialiser
         </button>
       </div>
 
       {/* Border status */}
-      <div className="flex flex-wrap gap-6 mb-3 text-sm">
-        {borders.map(({ type, label, labelCls, info }) => {
+      <div className="shrink-0 flex flex-wrap gap-4 text-sm">
+        {borderDefs.map(({ type, label, labelCls, info }) => {
           const s = STATUS[info.state];
           return (
             <div key={type} className="flex items-center gap-2">
@@ -233,12 +275,10 @@ export default function GameGrid() {
                 <button
                   onClick={() => closeBorder(type)}
                   className="px-2 py-0.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-white"
-                >
-                  Fermer
-                </button>
+                >Fermer</button>
               )}
               {info.state === 'branched' && (
-                <span className="text-xs text-gray-500">(simplifiez le tracé)</span>
+                <span className="text-xs text-gray-500">(simplifiez)</span>
               )}
             </div>
           );
@@ -246,34 +286,44 @@ export default function GameGrid() {
       </div>
 
       {/* Width violation message */}
-      <div className={`mb-3 overflow-hidden transition-all duration-300 ${widthError ? 'max-h-20 opacity-100' : 'max-h-0 opacity-0'}`}>
+      <div className={`shrink-0 overflow-hidden transition-all duration-300 ${widthError ? 'max-h-16 opacity-100' : 'max-h-0 opacity-0'}`}>
         <div className="px-3 py-2 rounded bg-amber-900/50 border border-amber-500/40 text-amber-200 text-sm">
-          🏎️ <strong>Trop serré !</strong> Il faut au moins <strong>3 cases</strong> entre les deux bords pour que les voitures puissent manœuvrer. Éloigne un peu ce bord de l'autre.
+          🏎️ <strong>Trop serré !</strong> Il faut au moins <strong>3 cases</strong> entre les deux bords pour que les voitures puissent manœuvrer.
         </div>
       </div>
 
-      {/* Grid */}
+      {/* Scrollable grid container */}
       <div
-        className="border border-gray-700 w-full"
-        style={{ display: 'grid', gridTemplateColumns: `repeat(${COLS}, 1fr)` }}
+        ref={containerRef}
+        className="flex-1 min-h-0 overflow-auto rounded bg-gray-950"
       >
-        {Array.from({ length: ROWS * COLS }, (_, i) => {
-          const r = Math.floor(i / COLS), c = i % COLS;
-          const type = grid[r][c];
-          return (
-            <div
-              key={i}
-              className={`aspect-square border border-gray-800/40 cursor-crosshair
-                ${CELL_BG[type] ?? 'hover:bg-gray-700/50'}`}
-              onMouseDown={() => onMouseDown(r, c)}
-              onMouseEnter={() => onMouseEnter(r, c)}
-            />
-          );
-        })}
+        <div
+          style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${COLS}, ${cellSize}px)`,
+            gridTemplateRows: `repeat(${ROWS}, ${cellSize}px)`,
+            width: cellSize * COLS,
+            height: cellSize * ROWS,
+          }}
+        >
+          {Array.from({ length: ROWS * COLS }, (_, i) => {
+            const r = Math.floor(i / COLS), c = i % COLS;
+            const type = grid[r][c];
+            return (
+              <div
+                key={i}
+                className={`border border-gray-800/40 cursor-crosshair
+                  ${CELL_BG[type] ?? 'hover:bg-gray-700/50'}`}
+                onMouseDown={() => onMouseDown(r, c)}
+                onMouseEnter={() => onMouseEnter(r, c)}
+              />
+            );
+          })}
+        </div>
       </div>
 
-      <p className="mt-2 text-xs text-gray-600">
-        Dessinez les bords en cliquant-glissant · "Fermer" relie automatiquement les extrémités · La ligne d'arrivée se débloque quand les deux bords sont fermés — un clic la place automatiquement
+      <p className="shrink-0 text-xs text-gray-600">
+        Cliquer-glisser pour tracer · "Fermer" referme un bord ouvert · La ligne d'arrivée se place en un clic une fois les deux bords fermés
       </p>
     </div>
   );
