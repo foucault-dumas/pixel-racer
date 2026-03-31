@@ -68,6 +68,18 @@ function analyzeBorder(grid, type) {
   return { state: 'branched', endpoints };
 }
 
+// Find the cell of `type` closest to (r, c)
+function nearestOfType(grid, type, r, c) {
+  let best = null, bestDist = Infinity;
+  for (let nr = 0; nr < ROWS; nr++)
+    for (let nc = 0; nc < COLS; nc++)
+      if (grid[nr][nc] === type) {
+        const d = (nr - r) ** 2 + (nc - c) ** 2;
+        if (d < bestDist) { bestDist = d; best = [nr, nc]; }
+      }
+  return best;
+}
+
 const CELL_BG = {
   [OUTER]: 'bg-orange-500',
   [INNER]: 'bg-blue-500',
@@ -95,8 +107,32 @@ export default function GameGrid() {
     });
   }, [tool]);
 
-  const onMouseDown = (r, c) => { painting.current = true; paint(r, c); };
-  const onMouseEnter = (r, c) => { if (painting.current) paint(r, c); };
+  const placeFinishLine = useCallback((clickR, clickC) => {
+    setGrid(prev => {
+      const outerCell = nearestOfType(prev, OUTER, clickR, clickC);
+      const innerCell = nearestOfType(prev, INNER, clickR, clickC);
+      if (!outerCell || !innerCell) return prev;
+
+      const line = bresenham(outerCell[0], outerCell[1], innerCell[0], innerCell[1]);
+      const next = prev.map(row => [...row]);
+      // Clear existing finish line
+      for (let r = 0; r < ROWS; r++)
+        for (let c = 0; c < COLS; c++)
+          if (next[r][c] === FINISH) next[r][c] = null;
+      // Draw new finish line (track cells only, borders stay intact)
+      line.forEach(([r, c]) => {
+        if (next[r][c] !== OUTER && next[r][c] !== INNER) next[r][c] = FINISH;
+      });
+      return next;
+    });
+  }, []);
+
+  const onMouseDown = (r, c) => {
+    painting.current = true;
+    if (tool === FINISH) placeFinishLine(r, c);
+    else paint(r, c);
+  };
+  const onMouseEnter = (r, c) => { if (painting.current && tool !== FINISH) paint(r, c); };
   const stopPainting = () => { painting.current = false; };
 
   const outerInfo = useMemo(() => analyzeBorder(grid, OUTER), [grid]);
@@ -202,7 +238,7 @@ export default function GameGrid() {
       </div>
 
       <p className="mt-2 text-xs text-gray-600">
-        Dessinez les bords en cliquant-glissant · "Fermer" relie automatiquement les extrémités · La ligne d'arrivée se débloque quand les deux bords sont fermés
+        Dessinez les bords en cliquant-glissant · "Fermer" relie automatiquement les extrémités · La ligne d'arrivée se débloque quand les deux bords sont fermés — un clic la place automatiquement
       </p>
     </div>
   );
