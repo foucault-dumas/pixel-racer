@@ -1,1 +1,26 @@
 @import "tailwindcss";
+
+/* ── Identité « pixel art moderne » ─────────────────────────────────── */
+/* Police rétro réservée aux titres ; le corps reste lisible en sans-serif. */
+.font-pixel {
+  font-family: 'Press Start 2P', system-ui, monospace;
+  letter-spacing: 0.02em;
+}
+
+/* Titre néon pop : dégradé + halo lumineux. */
+.title-neon {
+  background: linear-gradient(90deg, #ff5d8f 0%, #ffd166 45%, #4cc9f0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 6px rgba(76, 201, 240, 0.45));
+}
+
+/* Rendu net des pixels (grille, voitures) — pas de lissage flou. */
+.pixelated { image-rendering: pixelated; }
+
+/* Léger battement pour les éléments actifs. */
+@keyframes pulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50%      { opacity: 0.15; transform: scale(1.15); }
+}
