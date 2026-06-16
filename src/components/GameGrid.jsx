@@ -117,6 +117,7 @@ export default function GameGrid() {
   const [containerSize, setContainerSize]   = useState({ w: 900, h: 500 });
 
   const painting    = useRef(false);
+  const lastCell    = useRef(null);   // dernière case peinte (pour relier le tracé)
   const gridRef     = useRef(grid);
   const errorTimer  = useRef(null);
   const containerRef = useRef(null);
@@ -174,15 +175,21 @@ export default function GameGrid() {
   }, []);
 
   // ── Editor drawing ──────────────────────────────────────────────
-  const paint = useCallback((r, c) => {
-    if ((tool === OUTER || tool === INNER) && violatesMinWidth(r, c, tool)) {
-      triggerWidthError(); return;
-    }
+  // Peint une liste de cases en une seule fois. Les cases qui violent la
+  // largeur minimale sont ignorées (et déclenchent le message d'erreur),
+  // les autres sont peintes : un glissé rapide ne laisse plus de trous.
+  const paintCells = useCallback((cells) => {
+    let violated = false;
     setGrid(prev => {
       const next = prev.map(row => [...row]);
-      next[r][c] = tool === 'eraser' ? null : tool;
+      for (const [r, c] of cells) {
+        if (tool === 'eraser') { next[r][c] = null; continue; }
+        if (violatesMinWidth(r, c, tool)) { violated = true; continue; }
+        next[r][c] = tool;
+      }
       return next;
     });
+    if (violated) triggerWidthError();
   }, [tool, violatesMinWidth, triggerWidthError]);
 
   const placeFinishLine = useCallback((clickR, clickC) => {
@@ -196,14 +203,19 @@ export default function GameGrid() {
   const onMouseDown = (r, c) => {
     if (phase !== 'editor') return;
     painting.current = true;
-    if (tool === 'finish') placeFinishLine(r, c);
-    else paint(r, c);
+    if (tool === 'finish') { placeFinishLine(r, c); return; }
+    lastCell.current = [r, c];
+    paintCells([[r, c]]);
   };
   const onMouseEnter = (r, c) => {
     if (phase !== 'editor' || !painting.current || tool === 'finish') return;
-    paint(r, c);
+    const last = lastCell.current;
+    // Relie la dernière case à la nouvelle pour combler les sauts de souris.
+    const cells = last ? bresenham(last[0], last[1], r, c) : [[r, c]];
+    lastCell.current = [r, c];
+    paintCells(cells);
   };
-  const stopPainting = () => { painting.current = false; };
+  const stopPainting = () => { painting.current = false; lastCell.current = null; };
 
   const closeBorder = (type) => {
     const info = type === OUTER ? outerInfo : innerInfo;
@@ -519,7 +531,7 @@ export default function GameGrid() {
       {/* ── Editor instructions ──────────────────────────────────── */}
       {phase === 'editor' && (
         <p className="shrink-0 text-xs text-gray-600">
-          Cliquer-glisser pour tracer · "Fermer" referme un bord ouvert · La ligne d'arrivée se place en un clic une fois les deux bords fermés
+          Cliquer-glisser pour tracer · «&nbsp;Fermer&nbsp;» referme un bord ouvert · La ligne d&apos;arrivée se place en un clic une fois les deux bords fermés
         </p>
       )}
     </div>
