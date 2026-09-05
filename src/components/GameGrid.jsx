@@ -1,527 +1,122 @@
-import { useState, useRef, useCallback, useMemo, useEffect } from 'react';
-
-const ROWS = 40;
-const COLS = 64;
-const OUTER = 'outer';
-const INNER = 'inner';
-const MIN_CELL = 6;
-const MAX_CELL = 48;
-const ZOOM_STEP = 3;
-
-const PLAYER_COLORS = ['#ef4444', '#818cf8', '#facc15', '#4ade80', '#f472b6', '#67e8f9'];
-const PLAYER_NAMES  = ['Rouge',   'Indigo',  'Jaune',   'Vert',    'Rose',    'Cyan'];
-
-const createGrid = () => Array.from({ length: ROWS }, () => Array(COLS).fill(null));
-
-function bresenham(r0, c0, r1, c1) {
-  const pts = [];
-  let dr = Math.abs(r1 - r0), dc = Math.abs(c1 - c0);
-  let sr = r0 < r1 ? 1 : -1, sc = c0 < c1 ? 1 : -1;
-  let err = dr - dc, r = r0, c = c0;
-  for (;;) {
-    pts.push([r, c]);
-    if (r === r1 && c === c1) break;
-    const e2 = 2 * err;
-    if (e2 > -dc) { err -= dc; r += sr; }
-    if (e2 < dr)  { err += dr; c += sc; }
-  }
-  return pts;
-}
-
-function neighbors8(r, c) {
-  const ns = [];
-  for (let dr = -1; dr <= 1; dr++)
-    for (let dc = -1; dc <= 1; dc++) {
-      if (!dr && !dc) continue;
-      const nr = r + dr, nc = c + dc;
-      if (nr >= 0 && nr < ROWS && nc >= 0 && nc < COLS) ns.push([nr, nc]);
-    }
-  return ns;
-}
-
-function analyzeBorder(grid, type) {
-  const cells = [];
-  for (let r = 0; r < ROWS; r++)
-    for (let c = 0; c < COLS; c++)
-      if (grid[r][c] === type) cells.push([r, c]);
-  if (cells.length === 0) return { state: 'empty' };
-
-  const visited = new Set();
-  const queue = [cells[0]];
-  visited.add(cells[0].join(','));
-  while (queue.length) {
-    const [r, c] = queue.shift();
-    for (const [nr, nc] of neighbors8(r, c)) {
-      const key = `${nr},${nc}`;
-      if (grid[nr][nc] === type && !visited.has(key)) {
-        visited.add(key); queue.push([nr, nc]);
-      }
-    }
-  }
-  if (visited.size !== cells.length) return { state: 'disconnected' };
-
-  const endpoints = cells.filter(([r, c]) =>
-    neighbors8(r, c).filter(([nr, nc]) => grid[nr][nc] === type).length <= 1
-  );
-  if (endpoints.length === 0) return { state: 'closed' };
-  if (endpoints.length === 2) return { state: 'open', endpoints };
-  return { state: 'branched', endpoints };
-}
-
-function nearestOfType(grid, type, r, c) {
-  let best = null, bestDist = Infinity;
-  for (let nr = 0; nr < ROWS; nr++)
-    for (let nc = 0; nc < COLS; nc++)
-      if (grid[nr][nc] === type) {
-        const d = (nr - r) ** 2 + (nc - c) ** 2;
-        if (d < bestDist) { bestDist = d; best = [nr, nc]; }
-      }
-  return best;
-}
-
-const CELL_BG = { [OUTER]: 'bg-orange-500', [INNER]: 'bg-blue-500' };
-
-const STATUS = {
-  empty:        { label: '—',             cls: 'text-gray-500' },
-  closed:       { label: '✓ Fermé',       cls: 'text-emerald-400' },
-  open:         { label: '◌ Ouvert',      cls: 'text-yellow-400' },
-  branched:     { label: '✗ Branches',    cls: 'text-red-400' },
-  disconnected: { label: '✗ Déconnecté', cls: 'text-red-400' },
-};
-
-function shuffle(arr) {
-  const a = [...arr];
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
-}
+import { useState, useRef, useMemo, useEffect } from 'react';
+import { COLS, ROWS, PENS, point, same, presetTrack, validateTrack, finishAt, raceTangent, startPositions, makeRace, placePlayer, naturalPoint, choices, inspectMove, advanceRace } from '../lib/racing';
+import Notebook from './Notebook';
+import Rules from './Rules';
 
 export default function GameGrid() {
-  // ── Circuit state ──────────────────────────────────────────────
-  const [grid, setGrid]           = useState(createGrid);
-  const [tool, setTool]           = useState(OUTER);
-  const [widthError, setWidthError] = useState(false);
-  const [finishLine, setFinishLine] = useState(null);
-  const [playerCount, setPlayerCount] = useState(2);
+  const [track,setTrack] = useState(presetTrack);
+  const [race,setRace] = useState(null);
+  const [names,setNames] = useState(['','','','','','']);
+  const [count,setCount] = useState(2);
+  const [help,setHelp] = useState(true);
+  const [rules,setRules] = useState(false);
+  const [editing,setEditing] = useState(false);
+  const [tool,setTool] = useState('outer');
+  const [draft,setDraft] = useState([]);
+  const [message,setMessage] = useState('Choisis ton Bic. Le dernier arrivé commence ? On tire au sort.');
+  const [selected,setSelected] = useState(null);
+  const [zoom,setZoom] = useState(1);
+  const [confirm,setConfirm] = useState(false);
+  const [notebook,setNotebook] = useState(1);
+  const dialogRef = useRef(null);
+  const player = race?.players[race.active];
+  const phase = race?.phase ?? 'setup';
+  const error = useMemo(()=>validateTrack(track),[track]);
+  const startNodes = useMemo(()=>phase==='placement'?startPositions(track,race.players.map(p=>p.position).filter(Boolean)):[],[phase,race,track]);
+  const moves = phase==='playing'?choices(player):[];
+  const center = phase==='playing'?naturalPoint(player):null;
+  const moveCheck = selected && phase==='playing'?inspectMove(race,selected,track):null;
+  const ready = !error && track.finish && !editing;
+  const winner = phase==='finished'?race.players.find(p=>p.id===race.winner):null;
+  useEffect(()=>{ if(rules||confirm) dialogRef.current?.showModal(); else dialogRef.current?.close(); },[rules,confirm]);
 
-  // ── Game state ─────────────────────────────────────────────────
-  // phase: 'editor' | 'placement' | 'playing'
-  const [phase, setPhase]               = useState('editor');
-  const [players, setPlayers]           = useState([]);   // ordered by turn
-  const [currentPlayerIdx, setCurrentPlayerIdx] = useState(0);
-
-  // ── Display state ──────────────────────────────────────────────
-  const [manualCellSize, setManualCellSize] = useState(null);
-  const [containerSize, setContainerSize]   = useState({ w: 900, h: 500 });
-
-  const painting    = useRef(false);
-  const gridRef     = useRef(grid);
-  const errorTimer  = useRef(null);
-  const containerRef = useRef(null);
-
-  useEffect(() => { gridRef.current = grid; }, [grid]);
-
-  useEffect(() => {
-    const el = containerRef.current;
-    if (!el) return;
-    const obs = new ResizeObserver(([entry]) => {
-      const { width, height } = entry.contentRect;
-      setContainerSize({ w: width, h: height });
-    });
-    obs.observe(el);
-    return () => obs.disconnect();
-  }, []);
-
-  // ── Zoom ────────────────────────────────────────────────────────
-  const baseCellSize = Math.max(MIN_CELL,
-    Math.floor(Math.min(containerSize.w / COLS, containerSize.h / ROWS)));
-  const cellSize = manualCellSize ?? baseCellSize;
-  const zoomIn   = () => setManualCellSize(s => Math.min(MAX_CELL, (s ?? baseCellSize) + ZOOM_STEP));
-  const zoomOut  = () => setManualCellSize(s => Math.max(MIN_CELL, (s ?? baseCellSize) - ZOOM_STEP));
-  const fitScreen = () => setManualCellSize(null);
-  const isAuto   = manualCellSize === null;
-  const zoomPct  = Math.round((cellSize / baseCellSize) * 100);
-
-  // ── Circuit analysis ────────────────────────────────────────────
-  const outerInfo = useMemo(() => analyzeBorder(grid, OUTER), [grid]);
-  const innerInfo = useMemo(() => analyzeBorder(grid, INNER), [grid]);
-  const bothClosed = outerInfo.state === 'closed' && innerInfo.state === 'closed';
-  const circuitReady = bothClosed && finishLine !== null;
-
-  // Grid nodes on the finish line (used as placement targets)
-  const finishNodes = useMemo(() => {
-    if (!finishLine) return [];
-    return bresenham(finishLine.r1, finishLine.c1, finishLine.r2, finishLine.c2);
-  }, [finishLine]);
-
-  // ── Min-width enforcement ───────────────────────────────────────
-  const violatesMinWidth = useCallback((r, c, type) => {
-    const opposite = type === OUTER ? INNER : OUTER;
-    const g = gridRef.current;
-    for (let nr = 0; nr < ROWS; nr++)
-      for (let nc = 0; nc < COLS; nc++)
-        if (g[nr][nc] === opposite && (nr - r) ** 2 + (nc - c) ** 2 < 16)
-          return true;
-    return false;
-  }, []);
-
-  const triggerWidthError = useCallback(() => {
-    setWidthError(true);
-    clearTimeout(errorTimer.current);
-    errorTimer.current = setTimeout(() => setWidthError(false), 3000);
-  }, []);
-
-  // ── Editor drawing ──────────────────────────────────────────────
-  const paint = useCallback((r, c) => {
-    if ((tool === OUTER || tool === INNER) && violatesMinWidth(r, c, tool)) {
-      triggerWidthError(); return;
+  function newRace() {
+    if(!ready)return;
+    const next=makeRace(names.slice(0,count));
+    setRace(next);setSelected(null);setMessage(next.message);
+  }
+  function resetRace() {
+    setRace(null);setSelected(null);setConfirm(false);setMessage('Les Bics sont prêts. On en refait une ?');
+  }
+  function startDrawing() {
+    setTrack({outer:[],inner:[],finish:null,direction:track.direction});
+    setEditing(true);setTool('outer');setDraft([]);setSelected(null);setNotebook(n=>n+1);
+    setMessage('Trace le bord extérieur : clique les coins ou dessine en maintenant le doigt.');
+  }
+  function closeBorder() {
+    if(draft.length<3){setMessage('Il faut au moins trois points pour fermer une boucle.');return;}
+    const closed=same(draft[0],draft.at(-1))?draft.slice(0,-1):draft;
+    const next={...track,[tool]:closed,finish:null};
+    setTrack(next);setDraft([]);
+    if(tool==='outer'){setTool('inner');setMessage('Trace une deuxième boucle à l’intérieur. Laisse au moins trois carreaux de piste.');}
+    else {const problem=validateTrack(next);if(problem){setMessage(problem);return;}setTool('finish');setMessage('Clique dans la piste pour poser la ligne de départ.');}
+  }
+  function usePreset(){setTrack(presetTrack());setEditing(false);setDraft([]);setMessage('Le circuit de la récré est prêt.');}
+  function selectPoint(p) {
+    if(!p)return;
+    if(editing){
+      if(tool==='finish'){
+        if(error){setMessage(error);return;}
+        const finish=finishAt(p,track);
+        if(!finish){setMessage('Clique entre les deux bords, sur une portion assez droite.');return;}
+        setTrack(t=>({...t,finish}));setEditing(false);setMessage('Circuit terminé. Rassemble les Bics !');
+      } else setDraft(prev=>same(prev.at(-1),p)?prev:[...prev,p]);
+      return;
     }
-    setGrid(prev => {
-      const next = prev.map(row => [...row]);
-      next[r][c] = tool === 'eraser' ? null : tool;
-      return next;
-    });
-  }, [tool, violatesMinWidth, triggerWidthError]);
-
-  const placeFinishLine = useCallback((clickR, clickC) => {
-    const g = gridRef.current;
-    const outerCell = nearestOfType(g, OUTER, clickR, clickC);
-    const innerCell = nearestOfType(g, INNER, clickR, clickC);
-    if (!outerCell || !innerCell) return;
-    setFinishLine({ r1: outerCell[0], c1: outerCell[1], r2: innerCell[0], c2: innerCell[1] });
-  }, []);
-
-  const onMouseDown = (r, c) => {
-    if (phase !== 'editor') return;
-    painting.current = true;
-    if (tool === 'finish') placeFinishLine(r, c);
-    else paint(r, c);
-  };
-  const onMouseEnter = (r, c) => {
-    if (phase !== 'editor' || !painting.current || tool === 'finish') return;
-    paint(r, c);
-  };
-  const stopPainting = () => { painting.current = false; };
-
-  const closeBorder = (type) => {
-    const info = type === OUTER ? outerInfo : innerInfo;
-    if (info.state !== 'open') return;
-    const [[r0, c0], [r1, c1]] = info.endpoints;
-    const line = bresenham(r0, c0, r1, c1);
-    setGrid(prev => {
-      const next = prev.map(row => [...row]);
-      line.forEach(([r, c]) => { next[r][c] = type; });
-      return next;
-    });
-  };
-
-  // ── Game launch ─────────────────────────────────────────────────
-  const launchGame = () => {
-    const colorIndices = shuffle(Array.from({ length: playerCount }, (_, i) => i));
-    setPlayers(colorIndices.map(ci => ({
-      color: PLAYER_COLORS[ci],
-      name:  PLAYER_NAMES[ci],
-      position: null,
-    })));
-    setCurrentPlayerIdx(0);
-    setPhase('placement');
-  };
-
-  const backToEditor = () => {
-    setPhase('editor');
-    setPlayers([]);
-    setCurrentPlayerIdx(0);
-  };
-
-  const resetAll = () => {
-    setGrid(createGrid());
-    setFinishLine(null);
-    setTool(OUTER);
-    setManualCellSize(null);
-    setPhase('editor');
-    setPlayers([]);
-    setCurrentPlayerIdx(0);
-  };
-
-  // ── Placement ───────────────────────────────────────────────────
-  const handleNodeClick = (nr, nc) => {
-    if (phase !== 'placement') return;
-    if (players.some(p => p.position?.r === nr && p.position?.c === nc)) return;
-    setPlayers(prev => prev.map((p, i) =>
-      i === currentPlayerIdx ? { ...p, position: { r: nr, c: nc } } : p
-    ));
-    const nextIdx = currentPlayerIdx + 1;
-    if (nextIdx >= playerCount) {
-      setCurrentPlayerIdx(0);
-      setPhase('playing');
-    } else {
-      setCurrentPlayerIdx(nextIdx);
-    }
-  };
-
-  // ── Derived SVG values ──────────────────────────────────────────
-  const carRadius     = Math.max(4, Math.round(cellSize * 0.32));
-  const finishStroke  = Math.max(2, Math.round(cellSize / 6));
-  const currentPlayer = players[currentPlayerIdx];
-
-  // ── Tool definitions ────────────────────────────────────────────
-  const toolDefs = [
-    { id: OUTER,    label: 'Bord extérieur', bg: 'bg-orange-500' },
-    { id: INNER,    label: 'Bord intérieur',  bg: 'bg-blue-500' },
-    { id: 'finish', label: "Ligne d'arrivée", bg: 'bg-emerald-500', disabled: !bothClosed },
-    { id: 'eraser', label: 'Effacer',          bg: 'bg-gray-600' },
-  ];
-  const borderDefs = [
-    { type: OUTER, label: 'Bord ext.', labelCls: 'text-orange-400', info: outerInfo },
-    { type: INNER, label: 'Bord int.', labelCls: 'text-blue-400',   info: innerInfo },
-  ];
-
-  return (
-    <div
-      className="h-full flex flex-col p-3 gap-2 select-none"
-      onMouseUp={stopPainting}
-      onMouseLeave={stopPainting}
-    >
-      {/* ── Toolbar ────────────────────────────────────────────── */}
-      <div className="shrink-0 flex flex-wrap items-center gap-2">
-
-        {phase === 'editor' ? (
-          <>
-            {toolDefs.map(t => (
-              <button key={t.id} disabled={t.disabled}
-                onClick={() => !t.disabled && setTool(t.id)}
-                className={`px-3 py-1.5 rounded text-white text-sm font-medium transition-all
-                  ${t.bg}
-                  ${tool === t.id ? 'ring-2 ring-white ring-offset-1 ring-offset-gray-950 scale-105' : 'opacity-50 hover:opacity-80'}
-                  disabled:cursor-not-allowed disabled:opacity-25`}
-              >{t.label}</button>
-            ))}
-            {/* Player count */}
-            <div className="flex items-center gap-1 border-l border-gray-700 pl-3">
-              <span className="text-xs text-gray-400 mr-1">Joueurs</span>
-              {[2, 3, 4, 5, 6].map(n => (
-                <button key={n} onClick={() => setPlayerCount(n)}
-                  className={`w-7 h-7 rounded text-sm font-bold transition-all
-                    ${playerCount === n
-                      ? 'bg-violet-500 text-white scale-110'
-                      : 'bg-gray-700 text-gray-400 hover:bg-gray-600 hover:text-white'}`}
-                >{n}</button>
-              ))}
-            </div>
-          </>
-        ) : (
-          /* Back to editor button in non-editor phases */
-          <button onClick={backToEditor}
-            className="px-3 py-1.5 rounded text-sm font-medium bg-gray-700 hover:bg-gray-600 text-gray-300"
-          >← Modifier le circuit</button>
-        )}
-
-        {/* Zoom controls — always visible */}
-        <div className="ml-auto flex items-center gap-1">
-          <button onClick={zoomOut} className="w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-white text-base" title="Dézoomer">−</button>
-          <button onClick={fitScreen}
-            className={`px-2 h-7 rounded text-xs font-mono transition-colors
-              ${isAuto ? 'bg-gray-600 text-white' : 'bg-gray-700 hover:bg-gray-600 text-gray-300'}`}
-            title="Adapter à l'écran"
-          >{isAuto ? 'auto' : `${zoomPct}%`}</button>
-          <button onClick={zoomIn} className="w-7 h-7 flex items-center justify-center rounded bg-gray-700 hover:bg-gray-600 text-white text-base" title="Zoomer">+</button>
-        </div>
-
-        <button onClick={resetAll}
-          className="px-3 py-1.5 rounded text-white text-sm font-medium bg-red-800 opacity-50 hover:opacity-80"
-        >Réinitialiser</button>
-      </div>
-
-      {/* ── Editor status row ───────────────────────────────────── */}
-      {phase === 'editor' && (
-        <div className="shrink-0 flex flex-wrap items-center gap-4 text-sm">
-          {borderDefs.map(({ type, label, labelCls, info }) => {
-            const s = STATUS[info.state];
-            return (
-              <div key={type} className="flex items-center gap-2">
-                <span className={`font-medium ${labelCls}`}>{label} :</span>
-                <span className={s.cls}>{s.label}</span>
-                {info.state === 'open' && (
-                  <button onClick={() => closeBorder(type)}
-                    className="px-2 py-0.5 text-xs rounded bg-gray-700 hover:bg-gray-600 text-white"
-                  >Fermer</button>
-                )}
-                {info.state === 'branched' && (
-                  <span className="text-xs text-gray-500">(simplifiez)</span>
-                )}
-              </div>
-            );
-          })}
-          {circuitReady && (
-            <button onClick={launchGame}
-              className="ml-auto px-4 py-1.5 rounded bg-violet-600 hover:bg-violet-500 text-white font-semibold text-sm transition-colors"
-            >🏁 Lancer la partie</button>
-          )}
-        </div>
-      )}
-
-      {/* ── Width violation message ─────────────────────────────── */}
-      {phase === 'editor' && (
-        <div className={`shrink-0 overflow-hidden transition-all duration-300 ${widthError ? 'max-h-16 opacity-100' : 'max-h-0 opacity-0'}`}>
-          <div className="px-3 py-2 rounded bg-amber-900/50 border border-amber-500/40 text-amber-200 text-sm">
-            🏎️ <strong>Trop serré !</strong> Il faut au moins <strong>3 cases</strong> entre les deux bords pour que les voitures puissent manœuvrer.
-          </div>
-        </div>
-      )}
-
-      {/* ── Current player banner (placement & playing) ─────────── */}
-      {phase !== 'editor' && currentPlayer && (
-        <div
-          className="shrink-0 px-4 py-2 rounded-lg flex items-center gap-3 text-sm font-medium transition-colors"
-          style={{ backgroundColor: `${currentPlayer.color}22`, border: `1px solid ${currentPlayer.color}66` }}
-        >
-          <span
-            className="w-3 h-3 rounded-full shrink-0 animate-pulse"
-            style={{ backgroundColor: currentPlayer.color, boxShadow: `0 0 8px ${currentPlayer.color}` }}
-          />
-          <span style={{ color: currentPlayer.color }} className="font-bold">
-            Joueur {currentPlayerIdx + 1} — {currentPlayer.name}
-          </span>
-          <span className="text-gray-300">
-            {phase === 'placement'
-              ? 'clique sur la ligne de départ pour placer ta voiture'
-              : "c'est ton tour"}
-          </span>
-        </div>
-      )}
-
-      {/* ── Scrollable grid container ───────────────────────────── */}
-      <div ref={containerRef} className="flex-1 min-h-0 overflow-auto rounded bg-gray-950">
-        <div style={{ position: 'relative', width: cellSize * COLS, height: cellSize * ROWS }}>
-
-          {/* Cell grid */}
-          <div style={{
-            display: 'grid',
-            gridTemplateColumns: `repeat(${COLS}, ${cellSize}px)`,
-            gridTemplateRows: `repeat(${ROWS}, ${cellSize}px)`,
-          }}>
-            {Array.from({ length: ROWS * COLS }, (_, i) => {
-              const r = Math.floor(i / COLS), c = i % COLS;
-              const type = grid[r][c];
-              return (
-                <div key={i}
-                  className={`border border-gray-800/40 ${phase === 'editor' ? 'cursor-crosshair' : ''}
-                    ${CELL_BG[type] ?? (phase === 'editor' ? 'hover:bg-gray-700/50' : '')}`}
-                  onMouseDown={() => onMouseDown(r, c)}
-                  onMouseEnter={() => onMouseEnter(r, c)}
-                />
-              );
-            })}
-          </div>
-
-          {/* SVG overlay — finish line, placement targets, cars */}
-          <svg
-            style={{ position: 'absolute', top: 0, left: 0, pointerEvents: 'none' }}
-            width={cellSize * COLS}
-            height={cellSize * ROWS}
-          >
-            {/* Finish line */}
-            {finishLine && (
-              <g>
-                <line
-                  x1={finishLine.c1 * cellSize} y1={finishLine.r1 * cellSize}
-                  x2={finishLine.c2 * cellSize} y2={finishLine.r2 * cellSize}
-                  stroke="#34d399" strokeWidth={finishStroke} strokeLinecap="round"
-                />
-                <circle cx={finishLine.c1 * cellSize} cy={finishLine.r1 * cellSize} r={finishStroke} fill="#34d399" />
-                <circle cx={finishLine.c2 * cellSize} cy={finishLine.r2 * cellSize} r={finishStroke} fill="#34d399" />
-              </g>
-            )}
-
-            {/* Placement targets (unoccupied finish-line nodes) */}
-            {phase === 'placement' && finishNodes.map(([nr, nc], i) => {
-              const occupied = players.find(p => p.position?.r === nr && p.position?.c === nc);
-              const px = nc * cellSize, py = nr * cellSize;
-              if (occupied) return null; // placed car rendered below
-              return (
-                <circle key={i}
-                  cx={px} cy={py} r={carRadius}
-                  fill={`${currentPlayer.color}33`}
-                  stroke={currentPlayer.color}
-                  strokeWidth={2}
-                  style={{ pointerEvents: 'all', cursor: 'pointer' }}
-                  onClick={() => handleNodeClick(nr, nc)}
-                />
-              );
-            })}
-
-            {/* Placed cars */}
-            {players.map((p, i) => {
-              if (!p.position) return null;
-              const px = p.position.c * cellSize, py = p.position.r * cellSize;
-              const isCurrent = i === currentPlayerIdx && phase === 'playing';
-              return (
-                <g key={i}>
-                  {isCurrent && (
-                    <circle cx={px} cy={py} r={carRadius + 4}
-                      fill="none" stroke={p.color} strokeWidth={2} opacity={0.5}
-                      style={{ animation: 'pulse 1.5s ease-in-out infinite' }}
-                    />
-                  )}
-                  <circle cx={px} cy={py} r={carRadius}
-                    fill={p.color}
-                    stroke={isCurrent ? 'white' : 'rgba(0,0,0,0.4)'}
-                    strokeWidth={isCurrent ? 2 : 1}
-                  />
-                  {/* Turn order number inside car */}
-                  <text
-                    x={px} y={py}
-                    textAnchor="middle" dominantBaseline="central"
-                    fontSize={Math.max(6, carRadius * 0.9)}
-                    fontWeight="bold"
-                    fill={isCurrent ? '#111' : 'rgba(0,0,0,0.7)'}
-                    style={{ pointerEvents: 'none', userSelect: 'none' }}
-                  >{i + 1}</text>
-                </g>
-              );
-            })}
-          </svg>
-        </div>
-      </div>
-
-      {/* ── Player bar (placement & playing) ────────────────────── */}
-      {phase !== 'editor' && players.length > 0 && (
-        <div className="shrink-0 flex items-center gap-2 py-1 overflow-x-auto">
-          <span className="text-xs text-gray-500 shrink-0">Ordre :</span>
-          {players.map((p, i) => {
-            const isCurrent = i === currentPlayerIdx;
-            const isPlaced = p.position !== null;
-            return (
-              <div key={i}
-                className={`flex items-center gap-1.5 px-2.5 py-1 rounded-full text-sm font-medium shrink-0 transition-all duration-300
-                  ${isCurrent ? 'scale-110' : 'opacity-50'}`}
-                style={{
-                  backgroundColor: isCurrent ? `${p.color}33` : 'transparent',
-                  border: `1.5px solid ${isCurrent ? p.color : 'rgba(255,255,255,0.1)'}`,
-                  boxShadow: isCurrent ? `0 0 10px ${p.color}55` : 'none',
-                }}
-              >
-                <span className="text-xs text-gray-400 font-mono">{i + 1}</span>
-                <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: p.color }} />
-                <span style={{ color: isCurrent ? p.color : '#9ca3af' }}>{p.name}</span>
-                {isPlaced && phase === 'placement' && (
-                  <span className="text-xs text-gray-500">✓</span>
-                )}
-                {isCurrent && <span className="text-xs" style={{ color: p.color }}>◀</span>}
-              </div>
-            );
-          })}
-        </div>
-      )}
-
-      {/* ── Editor instructions ──────────────────────────────────── */}
-      {phase === 'editor' && (
-        <p className="shrink-0 text-xs text-gray-600">
-          Cliquer-glisser pour tracer · "Fermer" referme un bord ouvert · La ligne d'arrivée se place en un clic une fois les deux bords fermés
-        </p>
-      )}
-    </div>
-  );
+    if(phase==='placement'){const next=placePlayer(race,p,track);setRace(next);setMessage(next.message);setSelected(null);}
+    else if(phase==='playing')setSelected(p);
+  }
+  function commitMove(){
+    if(!selected||phase!=='playing')return;
+    const next=advanceRace(race,selected,track);setRace(next);setMessage(next.message);
+    if(next.players!==race.players)setSelected(null);
+  }
+  function keyboard(event){
+    const steps={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]};
+    if(event.key==='Enter'||event.key===' '){event.preventDefault();if(phase==='playing')commitMove();else if(phase==='placement')selectPoint(selected??startNodes[0]);}
+    else if(steps[event.key]){
+      event.preventDefault();
+      if(phase==='placement' && startNodes.length){const i=startNodes.findIndex(p=>same(p,selected));const d=['ArrowLeft','ArrowUp'].includes(event.key)?-1:1;setSelected(startNodes[(i+d+startNodes.length)%startNodes.length]);}
+      else if(phase==='playing'){const base=selected??(help?center:player.position),[dx,dy]=steps[event.key];setSelected(point(Math.max(0,Math.min(COLS,base.x+dx)),Math.max(0,Math.min(ROWS,base.y+dy))));}
+    }else if(event.key==='Escape')setSelected(null);
+  }
+  const hint=phase==='setup'?(editing?(tool==='finish'?'3. Pose la ligne de départ':tool==='outer'?'1. Dessine le bord extérieur':'2. Dessine le bord intérieur'):'Un circuit, deux à six copains, un Bic chacun.'):phase==='placement'?'Choisis une intersection libre sur le départ.':phase==='finished'?'La sonnerie peut attendre. Une revanche ?':player.penalty?`Première vitesse · encore ${player.penalty} coup${player.penalty>1?'s':''} à un carreau maximum.`:'Reporte ton dernier trait. Choisis le point suivant.';
+  return <div className="desk">
+    <header className="masthead"><a className="brand" href="./" aria-label="Pixel Racer, accueil"><span className="brand-mark">pr<span>↗</span></span><span>PIXEL RACER<small>LES JEUX DU FOND DE LA CLASSE</small></span></a><button className="rules-button" onClick={()=>setRules(true)}><span aria-hidden="true">?</span> Les règles du cahier</button></header>
+    <div className="title-row"><div><p className="eyebrow">UN CAHIER. QUELQUES BICS. ENCORE UN TOUR.</p><h1>La course des <em>petits carreaux.</em></h1></div><span className="margin-note" aria-hidden="true">Comme à la récré.<br/><span>Mais sans la sonnerie.</span></span></div>
+    <main className="game-layout">
+      <Notebook {...{track,race,player,phase,error,editing,tool,draft,notebook,zoom,setZoom,help,selected,moveCheck,moves,center,startNodes,selectPoint,keyboard}} tangent={track.finish?raceTangent(track):null}/>
+      <aside className="side-panel">
+        <div className="panel-kicker">{phase==='setup'?'01 / ON SORT LES BICS':phase==='placement'?'02 / À VOS PLACES':phase==='finished'?'LA GLOIRE DE LA RÉCRÉ':'03 / À TOI DE JOUER'}</div>
+        <h2 style={{color:player?.color}}>{winner?`${winner.name} gagne !`:player?player.name:'Qui joue ?'}</h2><p className="hint">{hint}</p>
+        {phase==='setup' && <>
+          <fieldset className="player-count"><legend>Autour du cahier</legend>{[2,3,4,5,6].map(n=><button key={n} aria-pressed={count===n} onClick={()=>setCount(n)}>{n}</button>)}</fieldset>
+          <div className="name-list">{PENS.slice(0,count).map((pen,i)=><label key={pen.label} className="name-row" style={{'--pen':pen.color}}><span className="pen" aria-hidden="true"/><span className="sr-only">Nom du joueur au Bic {pen.label.toLowerCase()}</span><input maxLength={20} value={names[i]} placeholder={`Bic ${pen.label.toLowerCase()}`} onChange={e=>setNames(ns=>ns.map((n,j)=>j===i?e.target.value:n))}/></label>)}</div>
+          <label className="toggle"><input type="checkbox" checked={help} onChange={e=>setHelp(e.target.checked)}/><span>Montrer les points possibles<small>Pour retrouver le coup de main.</small></span></label>
+          <button className="primary" disabled={!ready} onClick={newRace}>On fait la course <span>↗</span></button>
+          <div className="circuit-tools"><p>Le circuit</p>{editing?<>
+            <div className="tool-tabs">{[['outer','Extérieur'],['inner','Intérieur'],['finish','Départ']].map(([key,label])=><button key={key} aria-pressed={tool===key} onClick={()=>{setTool(key);setDraft([]);}}>{label}</button>)}</div>
+            {tool!=='finish' && <><button className="secondary" onClick={closeBorder} disabled={draft.length<3}>Fermer ce bord</button><div className="small-actions"><button disabled={!draft.length} onClick={()=>setDraft(d=>d.slice(0,-1))}>↶ Dernier point</button><button onClick={()=>{setDraft([]);setTrack(t=>({...t,[tool]:[],finish:null}));}}>Effacer ce bord</button></div></>}
+            {error && <p className="editor-error">{error}</p>}<button className="text-button" onClick={usePreset}>Reprendre le circuit de la récré</button>
+          </>:<><button className="secondary" onClick={startDrawing}>✎ Dessiner notre circuit</button><button className="text-button" onClick={()=>setTrack(t=>({...t,direction:-t.direction}))}>Sens {track.direction===1?'horaire':'antihoraire'} <span>⇄</span></button><button className="text-button" onClick={()=>{setEditing(true);setTool('finish');setDraft([]);setMessage('Clique dans la piste pour déplacer le départ.');}}>Déplacer la ligne de départ</button></>}</div>
+        </>}
+        {phase==='placement' && <><div className="placement-symbol" style={{color:player.color}}>×<span>Pose ton Bic ici.</span></div><p className="small-note">Les points colorés indiquent les places libres. L’ordre a été tiré au sort.</p><button className="secondary" onClick={()=>selectPoint(selected??startNodes[0])} disabled={!startNodes.length}>Choisir {selected?'ce point':'une place libre'}</button></>}
+        {phase==='playing' && <>
+          <div className="player-stats"><div><strong>{player.turns+1}</strong><span>prochain coup</span></div><div><strong>{Math.max(Math.abs(player.velocity.x),Math.abs(player.velocity.y))}</strong><span>carreaux / coup</span></div></div>
+          {help && <div className="move-pad" aria-label="Les neuf destinations possibles">{moves.map((p,i)=>{const check=inspectMove(race,p,track);return <button key={i} aria-label={`Destination colonne ${p.x}, ligne ${p.y}${check.crash?', sortie de piste':''}${!check.valid?', occupée':''}`} aria-pressed={same(selected,p)} disabled={!check.valid} className={check.crash?'risky':''} onClick={()=>setSelected(p)}>{['↖','↑','↗','←','•','→','↙','↓','↘'][i]}</button>;})}</div>}
+          <p className="selection-note">{selected?`Point choisi : ${selected.x} · ${selected.y}`:'Clique une intersection du cahier.'}</p>
+          {moveCheck && (!moveCheck.valid||moveCheck.crash) && <p className="move-warning">{!moveCheck.valid?moveCheck.reason:'Ce trait sort de la piste : retour avant le bord et quatre coups au ralenti.'}</p>}
+          <button className="primary" style={{background:player.color}} disabled={!moveCheck?.valid} onClick={commitMove}>{moveCheck?.crash?'Jouer avec la pénalité':'Tracer mon coup'} <span>↗</span></button>
+          <label className="toggle"><input type="checkbox" checked={help} onChange={e=>{setHelp(e.target.checked);setSelected(null);}}/><span>Aide au calcul<small>Masque les points pour jouer de tête.</small></span></label>
+          {!help && <button className="text-button" onClick={()=>setSelected(naturalPoint(player))}>Je suis bloqué : montrer mon point d’inertie</button>}
+        </>}
+        {winner && <><div className="winner-doodle" aria-hidden="true">★</div><p className="winner-summary">Un tour complet en <strong>{winner.turns} coups</strong>.<br/>Ça mérite une étoile dans la marge.</p><button className="primary" onClick={newRace}>La revanche <span>↻</span></button></>}
+        {race && <><ol className="scoreboard">{race.players.map((p,i)=><li key={p.id} className={race.active===i?'active':''} style={{'--pen':p.color}}><span className="ink-dot"/><span>{p.name}<small>{p.position?`${p.turns} coup${p.turns>1?'s':''}${p.penalty?` · ralenti ${p.penalty}`:''}`:'Sur le banc de départ'}</small></span>{race.active===i && <b aria-label="Joueur actif">←</b>}</li>)}</ol><button className="text-button abandon" onClick={()=>setConfirm(true)}>Revenir au début</button></>}
+      </aside>
+    </main>
+    <footer className="game-footer"><p role="status" aria-live="polite">{message}</p><span>2–6 joueurs · un écran · un tour pour gagner</span></footer>
+    {(rules||confirm) && <dialog ref={dialogRef} onCancel={()=>{setRules(false);setConfirm(false);}} className="paper-dialog">
+      {confirm?<><p className="eyebrow">ON TOURNE LA PAGE ?</p><h2>Recommencer la partie</h2><p>Les traits de cette course seront effacés. Le circuit et les prénoms restent.</p><div className="dialog-actions"><button className="secondary" onClick={()=>setConfirm(false)}>Continuer la course</button><button className="primary" onClick={resetRace}>Recommencer</button></div></>:<Rules close={()=>setRules(false)}/>}
+    </dialog>}
+  </div>;
 }
