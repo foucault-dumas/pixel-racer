@@ -130,3 +130,11 @@ Dans les deux modes, la **position précédente du joueur** est toujours visible
 | Même point que l'adversaire | Interdit |
 | Traversée de trajectoire adverse | Autorisée |
 | Franchissement de la ligne d'arrivée | Dans le sens de la course uniquement |
+
+## Précisions de la version numérique
+
+- Un trait qui touche ou traverse un bord est une sortie, même si son extrémité revient dans la piste. Le retour se fait sur une intersection libre avant le premier bord rencontré, sans raccourci.
+- Les quatre coups au ralenti sont les quatre prochains coups du joueur concerné, pas ceux de ses adversaires.
+- Un déplacement nul est autorisé (si le point appartient aux neuf destinations possibles).
+- La victoire exige un tour complet dans le sens choisi et un dépassement de la ligne. S’arrêter exactement sur celle-ci ne suffit pas.
+- L’éditeur propose un tracé par sommets ou à main levée, puis une fermeture explicite. La ligne de départ est une coupe horizontale ou verticale qui relie les deux bords.
