@@ -4,8 +4,11 @@ import Notebook from './Notebook';
 import Rules from './Rules';
 import { PENS, choices, inspectMove, naturalPoint, raceTangent, startPositions, same, presetTrack } from '../lib/racing';
 import { newToken, savedRooms, remember, roomLink, roomRequest, parsePersonalLink, resumeView, roomPeople } from '../lib/online';
+import { createTurnObserver } from '../lib/turn-notifications';
 
-export default function OnlineGame({options,onClose,onRecover}) {
+export default function OnlineGame({options,onClose,onRecover,penAudio,soundEnabled,toggleSound}) {
+  const [turnObserver] = useState(createTurnObserver);
+  const refreshing=useRef(false);
   const [entry] = useState(()=>{
     const old = savedRooms().find(r=>r.room===options.room);
     return { ...(old?.joined?{joined:true}:{}), ...(old?.recoverySaved?{recoverySaved:true}:{}), room:options.room || crypto.randomUUID(), token:options.player || old?.token || newToken(),
@@ -35,6 +38,7 @@ export default function OnlineGame({options,onClose,onRecover}) {
   function accept(next) {
     if (next.unchanged || (latest.current && next.version < latest.current.version)) return;
     if (next.version !== latest.current?.version) setSelected(null);
+    if(turnObserver.observe(next))penAudio.play();
     latest.current=next;setData(next);
     const mine=next.members.find(p=>p.id===next.me);
     try {
@@ -49,6 +53,8 @@ export default function OnlineGame({options,onClose,onRecover}) {
   const acceptRef = useRef(accept);
   acceptRef.current=accept;
   async function refresh() {
+    if(refreshing.current)return;
+    refreshing.current=true;
     try {
       const next = await roomRequest(entry.room,entry.token,null,latest.current?.version);
       if (!mounted.current) return;
@@ -70,7 +76,7 @@ export default function OnlineGame({options,onClose,onRecover}) {
         setView(nextView);
         setError(nextView==='error'?message:'');
       }
-    }
+    } finally {refreshing.current=false;}
   }
   const refreshRef=useRef(refresh);
   refreshRef.current=refresh;
@@ -86,19 +92,25 @@ export default function OnlineGame({options,onClose,onRecover}) {
     } catch { setError('Ton navigateur bloque la sauvegarde de ton Bic. Autorise le stockage du site puis réessaie.'); }
     if (!options.create) refreshRef.current(); else setConnection('ok');
     let timer, cancelled=false;
+    const schedule=()=>{clearTimeout(timer);timer=setTimeout(tick,document.visibilityState==='visible'?10000:30000);};
     const tick=async()=>{
-      if (document.visibilityState==='visible' && latest.current) await refreshRef.current();
-      if (!cancelled) timer=setTimeout(tick,10000);
+      if (latest.current && latest.current.race?.phase!=='finished') await refreshRef.current();
+      if (!cancelled) schedule();
     };
-    timer=setTimeout(tick,10000);
-    const focus=()=>{if(document.visibilityState==='visible' && latest.current)refreshRef.current();};
+    schedule();
+    const focus=()=>{if(document.visibilityState==='visible' && latest.current)refreshRef.current();schedule();};
     window.addEventListener('focus',focus);document.addEventListener('visibilitychange',focus);
     return ()=>{cancelled=true;mounted.current=false;clearTimeout(timer);window.removeEventListener('focus',focus);document.removeEventListener('visibilitychange',focus);};
   },[entry,options.create,options.player]);
   useEffect(()=>{if(rules)dialog.current?.showModal();},[rules]);
   useEffect(()=>{
+    const icon=document.querySelector('link[rel="icon"]'), previousIcon=icon?.getAttribute('href');
+    icon?.setAttribute('href',myTurn?'/favicon-turn.svg':'/favicon.svg');
     document.title = myTurn ? 'À toi de jouer ! · Pixel Racer' : 'Pixel Racer · Le cahier partagé';
-    return ()=>{document.title='Pixel Racer — La course des petits carreaux';};
+    return ()=>{
+      document.title='Pixel Racer — La course des petits carreaux';
+      if(previousIcon)icon?.setAttribute('href',previousIcon);
+    };
   },[myTurn]);
 
   async function act(action,extra={}) {
@@ -147,7 +159,7 @@ export default function OnlineGame({options,onClose,onRecover}) {
   }
   const link=share ? roomLink(entry.room,share==='invite'?'invite':'player',share==='invite'?entry.invite:entry.token) : '';
   return <div className="desk">
-    <header className="masthead"><button className="brand brand-button" onClick={onClose}><span className="brand-mark">pr<span>↗</span></span><span>PIXEL RACER<small>LE CAHIER QUI VOYAGE</small></span></button><button className="rules-button" onClick={()=>setRules(true)}>ⓘ Les règles du cahier</button></header>
+    <header className="masthead"><button className="brand brand-button" onClick={onClose}><span className="brand-mark">pr<span>↗</span></span><span>PIXEL RACER<small>LE CAHIER QUI VOYAGE</small></span></button><div className="header-actions"><button className="sound-button" aria-pressed={soundEnabled} aria-label={soundEnabled?'Couper le son des tours':'Activer le son des tours'} title="Un petit clic quand ton tour arrive. Le navigateur peut suspendre le son en arrière-plan." onClick={toggleSound}><span aria-hidden="true">{soundEnabled?'🔊':'🔇'}</span> {soundEnabled?'Son activé':'Son coupé'}</button><button className="rules-button" onClick={()=>setRules(true)}>ⓘ Les règles du cahier</button></div></header>
     <div className="title-row"><div><p className="eyebrow">CHACUN CHEZ SOI. LE MÊME CAHIER.</p><h1>Les copains, <em>à un trait d’ici.</em></h1></div><span className="margin-note">400 km ?<br/><span>Toujours la même récré.</span></span></div>
     <div className="session-tools">
         {data && !backedUp && share!=='player' && <div className="backup-note"><strong>Pour revenir demain</strong><p>Garde ton lien personnel, même si ce navigateur mémorise ton Bic.</p><button className="secondary" onClick={()=>showLink('player')}>Garder mon lien personnel</button></div>}

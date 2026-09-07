@@ -42,6 +42,10 @@ Le navigateur mémorise le Bic. Dès l’arrivée, le jeu propose de conserver u
 
 À l’accueil, les cartes affichent les autres participants (« Reprendre avec Julie » ou « Reprendre avec Julie, X et Y »). Les anciennes parties récupèrent ces noms automatiquement à la connexion. « Retirer de mes cahiers » masque une course sur ce navigateur ; « Annuler » la remet dans la liste. La course et le Bic sont conservés, et le lien personnel permet toujours de l’ouvrir. Ce retrait n’abandonne pas la course pour les autres joueurs.
 
+Quand ton tour arrive, le titre de l’onglet change, une pastille apparaît sur son icône et un petit clic évoquant un Bic quatre couleurs se fait entendre. Le son est activé par défaut : le bouton « Son activé / Son coupé » mémorise ton choix sur ce navigateur. Les clics habituels pour créer, rejoindre ou reprendre préparent l’audio ; aucun bouton d’autorisation supplémentaire n’est imposé. Le placement et le premier mouvement déclenchent une seule alerte, sans répétition. Ouvrir une partie déjà à ton tour reste silencieux.
+
+Le jeu vérifie les tours toutes les dix secondes au premier plan, toutes les trente secondes dans un onglet masqué, et dès le retour à la page. Les navigateurs peuvent ralentir ou suspendre ces vérifications et le son, notamment sur téléphone verrouillé. Une nouvelle interaction peut être nécessaire après réouverture. Ce sont des alertes dans un onglet ouvert, pas des notifications push quand le jeu est fermé.
+
 Installation Supabase / Vercel et retour arrière : [MULTIPLAYER.md](MULTIPLAYER.md).
 
 ## Développement

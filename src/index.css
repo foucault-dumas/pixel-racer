@@ -37,3 +37,5 @@
 .saved-course{flex:0 0 auto;max-width:420px;min-width:210px}.saved-course>.secondary{width:100%}
 .resume-courses .remove-course{min-width:0;width:auto;font-size:12px;margin-top:5px;text-align:left}
 .removed-course{display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:#f7f2df;padding:12px 20px;margin-bottom:22px;border-radius:3px}.removed-course p{margin:0;font-size:14px}.removed-course button{width:auto;flex-shrink:0}
+.header-actions{display:flex;align-items:center;gap:20px;flex-wrap:wrap}.sound-button{display:inline-flex;align-items:center;gap:6px;padding:8px 10px;border:1px solid #9aaab8;border-radius:4px;background:transparent;color:#234eac;font:inherit;font-size:13px;cursor:pointer}.sound-button[aria-pressed=false]{color:#626976}.sound-button:focus-visible{outline:2px solid #234eac;outline-offset:3px}
+@media(max-width:800px){.masthead{flex-wrap:wrap;gap:14px}.header-actions{gap:12px}}
