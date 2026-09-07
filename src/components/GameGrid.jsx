@@ -85,6 +85,7 @@ export default function GameGrid({onOnline, recentRooms=[]}) {
   return <div className="desk">
     <header className="masthead"><a className="brand" href="./" aria-label="Pixel Racer, accueil"><span className="brand-mark">pr<span>↗</span></span><span>PIXEL RACER<small>LES JEUX DU FOND DE LA CLASSE</small></span></a><button className="rules-button" onClick={()=>setRules(true)}><span aria-hidden="true">?</span> Les règles du cahier</button></header>
     <div className="title-row"><div><p className="eyebrow">UN CAHIER. QUELQUES BICS. ENCORE UN TOUR.</p><h1>La course des <em>petits carreaux.</em></h1></div><span className="margin-note" aria-hidden="true">Comme à la récré.<br/><span>Mais sans la sonnerie.</span></span></div>
+    {!race && recentRooms.length>0 && <section className="resume-courses" aria-label="Reprendre une course"><h2>On reprend notre course ?</h2><p>Ton Bic t’attend. Choisis un cahier pour continuer.</p><div>{recentRooms.map(r=><button className="secondary" key={r.room} onClick={()=>onOnline({room:r.room})}>Reprendre avec {r.name || 'mon Bic'}<small>{new Date(r.updatedAt).toLocaleDateString('fr-FR')}</small></button>)}</div></section>}
     <main className="game-layout">
       <Notebook {...{track,race,player,phase,error,editing,tool,draft,notebook,zoom,setZoom,help,selected,moveCheck,moves,center,startNodes,selectPoint,keyboard}} tangent={track.finish?raceTangent(track):null}/>
       <aside className="side-panel">
@@ -97,7 +98,6 @@ export default function GameGrid({onOnline, recentRooms=[]}) {
           <button className="primary" disabled={!ready} onClick={newRace}>On fait la course <span>↗</span></button>
           <button className="secondary online-create" disabled={!ready} onClick={()=>onOnline({create:true,track,capacity:count,name:names[0]})}>Jouer à distance avec les copains ↗</button>
           <p className="small-note">Un lien à envoyer. Chacun joue quand il peut.</p>
-          {recentRooms.length>0 && <details className="recent-rooms"><summary>Mes cahiers en ligne ({recentRooms.length})</summary>{recentRooms.map(r=><button className="text-button" key={r.room} onClick={()=>onOnline({room:r.room})}>{r.name || 'Mon Bic'} · {new Date(r.updatedAt).toLocaleDateString('fr-FR')}</button>)}</details>}
           <div className="circuit-tools"><p>Le circuit</p>{editing?<>
             <div className="tool-tabs">{[['outer','Extérieur'],['inner','Intérieur'],['finish','Départ']].map(([key,label])=><button key={key} aria-pressed={tool===key} onClick={()=>{setTool(key);setDraft([]);}}>{label}</button>)}</div>
             {tool!=='finish' && <><button className="secondary" onClick={closeBorder} disabled={draft.length<3}>Fermer ce bord</button><div className="small-actions"><button disabled={!draft.length} onClick={()=>setDraft(d=>d.slice(0,-1))}>↶ Dernier point</button><button onClick={()=>{setDraft([]);setTrack(t=>({...t,[tool]:[],finish:null}));}}>Effacer ce bord</button></div></>}

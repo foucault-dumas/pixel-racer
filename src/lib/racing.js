@@ -167,8 +167,7 @@ export function placePlayer(race,p,track) {
   const options = startPositions(track,race.players.map(player => player.position).filter(Boolean));
   if (!options.some(q => same(p,q))) return { ...race, message: 'Choisis un point libre sur la rangée de départ indiquée.' };
   const players = race.players.map((player,i) => i === race.active ? { ...player, position:p, path:[p] } : player);
-  const last = race.active === players.length-1;
-  return { ...race, players, active: last ? 0 : race.active+1, phase: last ? 'playing' : 'placement', message: last ? 'C’est parti ! Ton premier déplacement : un carreau maximum.' : 'Au suivant : choisis ta place sur le départ.' };
+  return { ...race, players, phase:'playing', message:'Garde ton Bic : joue maintenant ton premier coup, un carreau maximum.' };
 }
 
 export const naturalPoint = player => point(player.position.x + (player.penalty ? 0 : player.velocity.x), player.position.y + (player.penalty ? 0 : player.velocity.y));
@@ -229,7 +228,8 @@ export function advanceRace(race,target,track) {
     penalty: check.crash ? 4 : Math.max(0,player.penalty-1), turns:player.turns+1,
     progress, path:[...player.path,end],
     crashes: check.crash ? [...player.crashes,mix(player.position,target,check.hit ?? 0)] : player.crashes };
+  const active = won ? race.active : (race.active+1)%race.players.length;
   return { ...race, players:race.players.map((p,i) => i===race.active ? updated:p),
-    active:won ? race.active : (race.active+1)%race.players.length, winner:won ? player.id:null, phase:won ? 'finished':'playing',
+    active, winner:won ? player.id:null, phase:won ? 'finished':race.players[active].position?'playing':'placement',
     message: won ? `${player.name} a gagné en ${updated.turns} coups !` : check.crash ? `${player.name} : sortie de piste ! Quatre prochains coups en première vitesse.` : `${player.name} a joué. Au suivant !` };
 }
