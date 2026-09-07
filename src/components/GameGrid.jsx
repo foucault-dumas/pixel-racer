@@ -1,9 +1,10 @@
+/* eslint-disable react/prop-types -- Internal screen callbacks. */
 import { useState, useRef, useMemo, useEffect } from 'react';
 import { COLS, ROWS, PENS, point, same, presetTrack, validateTrack, finishAt, raceTangent, startPositions, makeRace, placePlayer, naturalPoint, choices, inspectMove, advanceRace } from '../lib/racing';
 import Notebook from './Notebook';
 import Rules from './Rules';
 
-export default function GameGrid() {
+export default function GameGrid({onOnline, recentRooms=[]}) {
   const [track,setTrack] = useState(presetTrack);
   const [race,setRace] = useState(null);
   const [names,setNames] = useState(['','','','','','']);
@@ -94,6 +95,9 @@ export default function GameGrid() {
           <div className="name-list">{PENS.slice(0,count).map((pen,i)=><label key={pen.label} className="name-row" style={{'--pen':pen.color}}><span className="pen" aria-hidden="true"/><span className="sr-only">Nom du joueur au Bic {pen.label.toLowerCase()}</span><input maxLength={20} value={names[i]} placeholder={`Bic ${pen.label.toLowerCase()}`} onChange={e=>setNames(ns=>ns.map((n,j)=>j===i?e.target.value:n))}/></label>)}</div>
           <label className="toggle"><input type="checkbox" checked={help} onChange={e=>setHelp(e.target.checked)}/><span>Montrer les points possibles<small>Pour retrouver le coup de main.</small></span></label>
           <button className="primary" disabled={!ready} onClick={newRace}>On fait la course <span>↗</span></button>
+          <button className="secondary online-create" disabled={!ready} onClick={()=>onOnline({create:true,track,capacity:count,name:names[0]})}>Jouer à distance avec les copains ↗</button>
+          <p className="small-note">Un lien à envoyer. Chacun joue quand il peut.</p>
+          {recentRooms.length>0 && <details className="recent-rooms"><summary>Mes cahiers en ligne ({recentRooms.length})</summary>{recentRooms.map(r=><button className="text-button" key={r.room} onClick={()=>onOnline({room:r.room})}>{r.name || 'Mon Bic'} · {new Date(r.updatedAt).toLocaleDateString('fr-FR')}</button>)}</details>}
           <div className="circuit-tools"><p>Le circuit</p>{editing?<>
             <div className="tool-tabs">{[['outer','Extérieur'],['inner','Intérieur'],['finish','Départ']].map(([key,label])=><button key={key} aria-pressed={tool===key} onClick={()=>{setTool(key);setDraft([]);}}>{label}</button>)}</div>
             {tool!=='finish' && <><button className="secondary" onClick={closeBorder} disabled={draft.length<3}>Fermer ce bord</button><div className="small-actions"><button disabled={!draft.length} onClick={()=>setDraft(d=>d.slice(0,-1))}>↶ Dernier point</button><button onClick={()=>{setDraft([]);setTrack(t=>({...t,[tool]:[],finish:null}));}}>Effacer ce bord</button></div></>}

@@ -8,3 +8,19 @@
 @media(max-width:800px){.desk{padding:18px 18px 24px}.game-layout{grid-template-columns:1fr}.title-row{margin:24px 0}h1{font-size:33px;max-width:620px}.notebook{border-left-width:13px;margin-left:6px}.binding{left:-25px}.binding i{width:27px}.side-panel{background:#eef0ee88;border:1px solid #bfc9ce;padding:22px;border-radius:4px}.name-list{display:grid;grid-template-columns:1fr 1fr;gap:0 18px}.circuit-tools{margin-top:19px}.player-count button{width:42px;height:38px}.brand small{display:none}.masthead{gap:10px}.rules-button{font-size:12px}.board-size{min-width:580px}.page-heading{height:52px}.page-footer{height:45px}.game-footer{padding-top:18px}.scoreboard{display:grid;grid-template-columns:1fr 1fr;gap:6px}.player-stats{width:200px;margin-left:auto;margin-right:auto}.hint{max-width:480px}.move-pad{width:180px}.move-pad button{height:48px}}
 @media(max-width:450px){h1{font-size:28px}h1 em{white-space:normal}.eyebrow{font-size:10px}.brand{font-size:11px;gap:8px}.brand-mark{width:34px;height:34px}.rules-button{font-size:11px;gap:6px}.page-heading{font-size:12px;padding:0 12px 0 22px}.page-status{font-size:9px}.page-footer>span{max-width:160px;line-height:1.4}.zoom button{padding:5px}.name-list{grid-template-columns:1fr}.paper-dialog{padding:25px}.dialog-actions{flex-direction:column}.side-panel{padding:20px}}
 @media(prefers-reduced-motion:reduce){*{transition:none!important;scroll-behavior:auto!important}}
+
+/* Le cahier partagé garde les mêmes encres et le même papier. */
+.brand-button{border:0;background:transparent;text-align:left;padding:0;cursor:pointer;color:inherit}
+.online-create{margin-top:10px}
+.online-name{display:grid;gap:8px;margin:20px 0;font-weight:600}
+.online-name input,.share-box input{width:100%;min-width:0;border:0;border-bottom:1px solid #91aac3;background:#fff8;padding:12px 8px;color:#234eac;font:inherit;border-radius:2px}
+.my-pen{font-size:14px;border-bottom:1px dashed #c5bb9f;padding:0 0 16px}
+.waiting-note{margin:22px 0;padding:18px 12px;background:#eee5c56b;transform:rotate(-1deg);text-align:center}
+.waiting-note>span{font-size:38px;color:#234eac}
+.waiting-note p{font-size:15px;line-height:1.65;margin:8px 0}
+.share-box{padding:14px;margin:16px 0;border:1px dashed #91aac3;background:#f4f0dd;overflow-wrap:anywhere}
+.share-box p{font-size:14px;line-height:1.6}.share-box input{font:12px monospace;margin-bottom:12px}
+.connection-warning{font-size:14px;line-height:1.5;color:#965226}
+.recent-rooms{margin:18px 0;border-top:1px dashed #c5bb9f;padding-top:12px}
+.recent-rooms summary{cursor:pointer;font-size:14px}.recent-rooms button{display:block;text-align:left}
+.online-panel .scoreboard{margin-top:20px}

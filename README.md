@@ -30,7 +30,17 @@ Cliquer les sommets d’une boucle ou tracer au doigt / à la souris, puis ferme
 - Règles dans une boîte de dialogue native ; messages de course annoncés aux lecteurs d’écran.
 - Les numéros distinguent les joueurs en plus des couleurs.
 
-La partie se joue sur le même appareil. Pas de compte, de serveur de jeu ou de données envoyées. La course est conservée en mémoire : actualiser la page la remet à zéro.
+Le mode local se joue sur le même appareil et reste en mémoire : actualiser la page le remet à zéro. Il fonctionne sans Supabase.
+
+## Jouer à distance
+
+Préparer le circuit et le nombre de joueurs, puis choisir « Jouer à distance avec les copains ». Le créateur saisit son prénom et partage le lien d’invitation. Les amis choisissent leur prénom et reçoivent chacun un Bic. Quand tous sont là, le créateur lance la course et les invitations se ferment.
+
+Chaque coup est validé et enregistré côté serveur. Il peut se passer des heures ou des jours entre deux tours : aucun chronomètre. Le cahier se rafraîchit toutes les dix secondes quand il est visible et au retour sur la page. Chacun peut fermer son navigateur puis retrouver la partie dans « Mes cahiers en ligne ».
+
+Le navigateur mémorise le Bic. « Garder mon lien personnel » permet de reprendre la même place sur un autre appareil. Ce lien est privé : celui qui le possède peut jouer avec ce Bic. Conserver ce lien avant d’effacer les données du navigateur. Les vingt cahiers les plus récents sont affichés ; les anciens restent accessibles par leur lien.
+
+Installation Supabase / Vercel et retour arrière : [MULTIPLAYER.md](MULTIPLAYER.md).
 
 ## Développement
 
@@ -49,6 +59,11 @@ npm run preview
 - `src/components/GameGrid.jsx` : état et commandes de partie.
 - `src/components/Notebook.jsx` : cahier SVG, pointage souris/tactile et trajectoires.
 - `src/components/Rules.jsx` : règles affichées.
+- `src/components/OnlineGame.jsx` : invitations, reprise et interface de jeu partagé.
+- `api/rooms.js` : fonction Vercel ; `server/` : autorisations, transitions et accès à Supabase.
+- `supabase/migrations/` : schéma SQL versionné, isolé des autres applications.
 - `src/index.css` : papier, petits carreaux, spirale, typographie manuscrite et Bics.
 
 GitHub Actions exécute tests, lint et compilation. Vercel reste connecté au dépôt ; un push sur `main` met à jour le site, les branches utilisent les aperçus Vercel lorsque configurés.
+
+Pour vérifier le multijoueur sans accès au cloud : `npm run build`, puis `npm run test:online`. Ouvrir `http://127.0.0.1:4173`. Ce serveur de test stocke uniquement en mémoire et perd ses parties à l’arrêt. Ne jamais le déployer. Les tests utilisent aussi PostgreSQL embarqué (PGlite) pour exécuter la migration et vérifier réellement les droits SQL.
