@@ -3,8 +3,10 @@ import { useState, useRef, useMemo, useEffect } from 'react';
 import { COLS, ROWS, PENS, point, same, presetTrack, validateTrack, finishAt, raceTangent, startPositions, makeRace, placePlayer, naturalPoint, choices, inspectMove, advanceRace } from '../lib/racing';
 import Notebook from './Notebook';
 import Rules from './Rules';
+import { resumeLabel } from '../lib/online';
 
-export default function GameGrid({onOnline, recentRooms=[]}) {
+export default function GameGrid({onOnline, recentRooms=[], onHideRoom}) {
+  const [removedRoom,setRemovedRoom] = useState(null);
   const [track,setTrack] = useState(presetTrack);
   const [race,setRace] = useState(null);
   const [names,setNames] = useState(['','','','','','']);
@@ -35,6 +37,14 @@ export default function GameGrid({onOnline, recentRooms=[]}) {
     if(!ready)return;
     const next=makeRace(names.slice(0,count));
     setRace(next);setSelected(null);setMessage(next.message);
+  }
+  function removeRoom(entry) {
+    try {onHideRoom(entry.room);setRemovedRoom(entry);}
+    catch {setMessage('Impossible de retirer ce cahier : le navigateur bloque la sauvegarde.');}
+  }
+  function undoRemoval() {
+    try {onHideRoom(removedRoom.room,false);setRemovedRoom(null);}
+    catch {setMessage('Impossible de rétablir ce cahier. Réessaie.');}
   }
   function resetRace() {
     setRace(null);setSelected(null);setConfirm(false);setMessage('Les Bics sont prêts. On en refait une ?');
@@ -85,7 +95,8 @@ export default function GameGrid({onOnline, recentRooms=[]}) {
   return <div className="desk">
     <header className="masthead"><a className="brand" href="./" aria-label="Pixel Racer, accueil"><span className="brand-mark">pr<span>↗</span></span><span>PIXEL RACER<small>LES JEUX DU FOND DE LA CLASSE</small></span></a><button className="rules-button" onClick={()=>setRules(true)}><span aria-hidden="true">?</span> Les règles du cahier</button></header>
     <div className="title-row"><div><p className="eyebrow">UN CAHIER. QUELQUES BICS. ENCORE UN TOUR.</p><h1>La course des <em>petits carreaux.</em></h1></div><span className="margin-note" aria-hidden="true">Comme à la récré.<br/><span>Mais sans la sonnerie.</span></span></div>
-    {!race && recentRooms.length>0 && <section className="resume-courses" aria-label="Reprendre une course"><h2>On reprend notre course ?</h2><p>Ton Bic t’attend. Choisis un cahier pour continuer.</p><div>{recentRooms.map(r=><button className="secondary" key={r.room} onClick={()=>onOnline({room:r.room})}>Reprendre avec {r.name || 'mon Bic'}<small>{new Date(r.updatedAt).toLocaleDateString('fr-FR')}</small></button>)}</div></section>}
+    {!race && recentRooms.length>0 && <section className="resume-courses" aria-label="Reprendre une course"><h2>On reprend notre course ?</h2><p>Ton Bic t’attend. Choisis un cahier pour continuer.</p><div>{recentRooms.map(r=><div className="saved-course" key={r.room}><button className="secondary" onClick={()=>onOnline({room:r.room})}>{resumeLabel(r)}<small>{new Date(r.updatedAt).toLocaleDateString('fr-FR')}</small></button><button className="text-button remove-course" aria-label={`Retirer de mes cahiers : ${resumeLabel(r)}`} onClick={()=>removeRoom(r)}>Retirer de mes cahiers</button></div>)}</div></section>}
+    {!race && removedRoom && <div className="removed-course"><p role="status">Course retirée de ton accueil. Elle reste accessible avec ton lien personnel.</p><button className="text-button" onClick={undoRemoval}>Annuler</button></div>}
     <main className="game-layout">
       <Notebook {...{track,race,player,phase,error,editing,tool,draft,notebook,zoom,setZoom,help,selected,moveCheck,moves,center,startNodes,selectPoint,keyboard}} tangent={track.finish?raceTangent(track):null}/>
       <aside className="side-panel">
