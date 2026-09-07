@@ -51,6 +51,9 @@ test('private state requires membership; snapshots never disclose credentials',a
   assert.equal(r.headers['Cache-Control'],'no-store');
   assert.equal((await f.call('read',0,{version:'0'})).data.unchanged,true);
   assert.equal((await f.call('read',1,{version:'0'})).code,403);
+  const summary=await f.call('read',0,{summary:'1'});
+  assert.deepEqual(summary.data,{id:f.room,me:0,members:[{id:0,name:'Charles'}],capacity:2});
+  assert.equal((await f.call('read',1,{summary:'1'})).code,403);
 });
 
 test('invalid invitations, capacity and host authority are enforced',async()=>{

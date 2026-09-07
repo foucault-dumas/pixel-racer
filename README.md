@@ -40,6 +40,8 @@ Chaque coup est validé et enregistré côté serveur. Il peut se passer des heu
 
 Le navigateur mémorise le Bic. Dès l’arrivée, le jeu propose de conserver un lien personnel dans ses notes ou favoris. Ce lien est privé : celui qui le possède peut jouer avec ce Bic. Il permet de retrouver sa place sur un autre appareil ou après une session privée qui a effacé le stockage. Les vingt cahiers les plus récents sont visibles au-dessus du circuit à l’accueil ; les anciens restent accessibles par leur lien. À l’ouverture d’une invitation, le jeu vérifie d’abord le Bic enregistré avant de proposer de rejoindre. La rubrique « Tu as déjà joué ? » permet de coller son lien personnel pour reprendre.
 
+À l’accueil, les cartes affichent les autres participants (« Reprendre avec Julie » ou « Reprendre avec Julie, X et Y »). Les anciennes parties récupèrent ces noms automatiquement à la connexion. « Retirer de mes cahiers » masque une course sur ce navigateur ; « Annuler » la remet dans la liste. La course et le Bic sont conservés, et le lien personnel permet toujours de l’ouvrir. Ce retrait n’abandonne pas la course pour les autres joueurs.
+
 Installation Supabase / Vercel et retour arrière : [MULTIPLAYER.md](MULTIPLAYER.md).
 
 ## Développement

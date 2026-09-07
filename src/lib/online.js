@@ -18,6 +18,29 @@ export function remember(entry) {
   const existing = savedRooms();
   localStorage.setItem(KEY,JSON.stringify([{...existing.find(r=>r.room===entry.room),...entry},...existing.filter(r=>r.room!==entry.room)]));
 }
+export function setRoomHidden(room, hidden=true) {
+  localStorage.setItem(KEY,JSON.stringify(savedRooms().map(r=>r.room===room?{...r,hidden}:r)));
+}
+export function roomPeople(snapshot) {
+  return {
+    opponents:snapshot.members.filter(p=>p.id!==snapshot.me).map(p=>p.name),
+    rosterComplete:snapshot.members.length===snapshot.capacity
+  };
+}
+export function resumeLabel(entry) {
+  const names=entry.opponents;
+  if(!Array.isArray(names) || !names.length)return 'Reprendre la course';
+  const people=names.length===1?names[0]:names.slice(0,-1).join(', ')+' et '+names.at(-1);
+  return 'Reprendre avec '+people;
+}
+export async function refreshRoomPeople(entry) {
+  const snapshot=await roomRequest(entry.room,entry.token,null,undefined,true);
+  const people=roomPeople(snapshot), current=savedRooms();
+  // Preserve dates, order and credentials, including a Bic restored while this
+  // request was in flight. Old records gain metadata without a new login.
+  localStorage.setItem(KEY,JSON.stringify(current.map(r=>
+    r.room===entry.room && r.token===entry.token ? {...r,...people} : r)));
+}
 export function newToken() {
   return btoa(String.fromCharCode(...crypto.getRandomValues(new Uint8Array(32)))).replaceAll('+','-').replaceAll('/','_').replace(/=+$/,'');
 }
@@ -42,8 +65,8 @@ export function resumeView(error, entry, personalLink=false) {
   if(error.status===401 || error.status===403)return entry.invite && !entry.joined && !personalLink ? 'join' : 'recover';
   return 'error';
 }
-export async function roomRequest(room, token, body, version) {
-  const response = await fetch(`/api/rooms${body ? '' : `?room=${room}${version===undefined?'':`&version=${version}`}`}`,{
+export async function roomRequest(room, token, body, version, summary=false) {
+  const response = await fetch(`/api/rooms${body ? '' : `?room=${room}${version===undefined?'':`&version=${version}`}${summary?'&summary=1':''}`}`,{
     method:body?'POST':'GET', headers:{Authorization:`Bearer ${token}`,...(body?{'Content-Type':'application/json'}:{})},
     body:body ? JSON.stringify({...body,room}) : undefined, cache:'no-store', signal:AbortSignal.timeout(15000)
   });

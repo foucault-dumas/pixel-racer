@@ -3,12 +3,12 @@ import { useEffect, useRef, useState } from 'react';
 import Notebook from './Notebook';
 import Rules from './Rules';
 import { PENS, choices, inspectMove, naturalPoint, raceTangent, startPositions, same, presetTrack } from '../lib/racing';
-import { newToken, savedRooms, remember, roomLink, roomRequest, parsePersonalLink, resumeView } from '../lib/online';
+import { newToken, savedRooms, remember, roomLink, roomRequest, parsePersonalLink, resumeView, roomPeople } from '../lib/online';
 
 export default function OnlineGame({options,onClose,onRecover}) {
   const [entry] = useState(()=>{
     const old = savedRooms().find(r=>r.room===options.room);
-    return { ...old, room:options.room || crypto.randomUUID(), token:options.player || old?.token || newToken(),
+    return { ...(old?.joined?{joined:true}:{}), ...(old?.recoverySaved?{recoverySaved:true}:{}), room:options.room || crypto.randomUUID(), token:options.player || old?.token || newToken(),
       invite:options.invite || old?.invite || (options.create ? newToken() : null) };
   });
   const [data,setData] = useState(null);
@@ -38,7 +38,7 @@ export default function OnlineGame({options,onClose,onRecover}) {
     latest.current=next;setData(next);
     const mine=next.members.find(p=>p.id===next.me);
     try {
-      remember({...entry,name:mine.name,joined:true,updatedAt:new Date().toISOString()});
+      remember({...entry,name:mine.name,joined:true,...roomPeople(next),updatedAt:new Date().toISOString()});
       history.replaceState(null,'',roomLink(entry.room));
     } catch {
       setBackedUp(false);setShare('player');

@@ -28,6 +28,7 @@ export function makeHandler({store,secret,enabled=true}) {
         const room = await store.get(req.query.room);
         if (!room) fail(404,'Partie introuvable.');
         const data = snapshot(room,token);
+        if(req.query.summary==='1')return res.status(200).json({id:data.id,me:data.me,members:data.members,capacity:data.capacity});
         // Reduce egress while polling a game whose next turn may be hours away.
         return res.status(200).json(String(room.version)===req.query.version ? {unchanged:true,version:room.version} : data);
       }

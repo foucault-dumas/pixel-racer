@@ -33,3 +33,7 @@
 @media(max-width:800px){.resume-courses{padding:15px}.resume-courses h2{font-size:21px}}
 .session-tools{max-width:650px}.session-tools .share-box,.session-tools .backup-note{margin:0 0 22px}
 @media(max-width:800px){.entry-layout .online-panel{order:-1}}
+.resume-courses button{max-width:420px;white-space:normal;overflow-wrap:anywhere}
+.saved-course{flex:0 0 auto;max-width:420px;min-width:210px}.saved-course>.secondary{width:100%}
+.resume-courses .remove-course{min-width:0;width:auto;font-size:12px;margin-top:5px;text-align:left}
+.removed-course{display:flex;align-items:center;gap:16px;flex-wrap:wrap;background:#f7f2df;padding:12px 20px;margin-bottom:22px;border-radius:3px}.removed-course p{margin:0;font-size:14px}.removed-course button{width:auto;flex-shrink:0}
