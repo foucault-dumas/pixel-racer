@@ -24,3 +24,12 @@
 .recent-rooms{margin:18px 0;border-top:1px dashed #c5bb9f;padding-top:12px}
 .recent-rooms summary{cursor:pointer;font-size:14px}.recent-rooms button{display:block;text-align:left}
 .online-panel .scoreboard{margin-top:20px}
+
+.resume-courses{margin:0 0 24px;padding:18px 22px;background:#f7f2df;border-left:4px solid #234eac;border-radius:3px}
+.resume-courses h2{margin:0;font-size:23px;color:#234eac}.resume-courses p{font-size:14px;margin:6px 0 14px}
+.resume-courses>div{display:flex;gap:10px;overflow-x:auto;padding-bottom:4px}.resume-courses button{width:auto;min-width:210px;text-align:left;flex-shrink:0}.resume-courses small{display:block;font-size:12px;font-weight:400;margin-top:4px}
+.backup-note,.recover-box{background:#f5eed7;padding:14px;margin:16px 0;border:1px dashed #b7a884}.backup-note p,.recover-box p{font-size:14px;line-height:1.6}.recover-box h3{margin:0;color:#234eac;font-size:20px}.recover-box input{font-size:14px}
+.share-box .secondary+.secondary{margin-top:8px}
+@media(max-width:800px){.resume-courses{padding:15px}.resume-courses h2{font-size:21px}}
+.session-tools{max-width:650px}.session-tools .share-box,.session-tools .backup-note{margin:0 0 22px}
+@media(max-width:800px){.entry-layout .online-panel{order:-1}}

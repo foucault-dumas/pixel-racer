@@ -11,6 +11,6 @@ export default function App() {
     return ()=>window.removeEventListener('hashchange',follow);
   },[]);
   function close() {history.replaceState(null,'',location.pathname+location.search);setOnline(null);}
-  return online ? <OnlineGame key={`${online.room || 'new'}:${online.player || online.invite || ''}`} options={online} onClose={close}/> :
+  return online ? <OnlineGame key={`${online.room || 'new'}:${online.player || online.invite || ''}`} options={online} onClose={close} onRecover={setOnline}/> :
     <GameGrid onOnline={setOnline} recentRooms={savedRooms().filter(r=>r.joined).slice(0,20)}/>;
 }

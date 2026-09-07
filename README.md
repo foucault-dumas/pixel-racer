@@ -9,7 +9,7 @@ Site : https://pixel-racer-six.vercel.app
 1. Choisir 2 à 6 joueurs et leurs prénoms. Chaque Bic a sa couleur.
 2. Garder le circuit de la récré ou dessiner le vôtre, puis choisir le sens de course.
 3. Cliquer sur « On fait la course ». L’ordre est tiré au sort.
-4. Placer chaque joueur sur un point libre du départ. Si nécessaire, une rangée arrière apparaît.
+4. Le joueur actif se place sur un point libre du départ, puis joue immédiatement son premier coup. Le suivant fait de même. Si nécessaire, une rangée arrière apparaît.
 5. Cliquer une intersection puis « Tracer mon coup ». Avec l’aide activée, le pavé de neuf flèches permet aussi de choisir une destination.
 6. Faire un tour complet et dépasser la ligne dans le bon sens pour gagner. La revanche conserve le circuit et les joueurs.
 
@@ -38,7 +38,7 @@ Préparer le circuit et le nombre de joueurs, puis choisir « Jouer à distance 
 
 Chaque coup est validé et enregistré côté serveur. Il peut se passer des heures ou des jours entre deux tours : aucun chronomètre. Le cahier se rafraîchit toutes les dix secondes quand il est visible et au retour sur la page. Chacun peut fermer son navigateur puis retrouver la partie dans « Mes cahiers en ligne ».
 
-Le navigateur mémorise le Bic. « Garder mon lien personnel » permet de reprendre la même place sur un autre appareil. Ce lien est privé : celui qui le possède peut jouer avec ce Bic. Conserver ce lien avant d’effacer les données du navigateur. Les vingt cahiers les plus récents sont affichés ; les anciens restent accessibles par leur lien.
+Le navigateur mémorise le Bic. Dès l’arrivée, le jeu propose de conserver un lien personnel dans ses notes ou favoris. Ce lien est privé : celui qui le possède peut jouer avec ce Bic. Il permet de retrouver sa place sur un autre appareil ou après une session privée qui a effacé le stockage. Les vingt cahiers les plus récents sont visibles au-dessus du circuit à l’accueil ; les anciens restent accessibles par leur lien. À l’ouverture d’une invitation, le jeu vérifie d’abord le Bic enregistré avant de proposer de rejoindre. La rubrique « Tu as déjà joué ? » permet de coller son lien personnel pour reprendre.
 
 Installation Supabase / Vercel et retour arrière : [MULTIPLAYER.md](MULTIPLAYER.md).
 

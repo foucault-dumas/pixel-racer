@@ -1,5 +1,5 @@
 import { createHmac } from 'node:crypto';
-import { GameError, fail, validId, validToken, createRoom, transition, snapshot } from './game.js';
+import { GameError, fail, hash, validId, validToken, createRoom, transition, snapshot } from './game.js';
 
 export function makeHandler({store,secret,enabled=true}) {
   return async function handler(req,res) {
@@ -47,9 +47,15 @@ export function makeHandler({store,secret,enabled=true}) {
           return res.status(200).json(snapshot(await store.get(body.room),token));
         }
       }
-      if (body.action === 'join' && !await store.limit(`join:${bucket}`,30,3600)) fail(429,'Trop de tentatives pour rejoindre. Réessaie plus tard.');
+      if (['join','invitation'].includes(body.action) && !await store.limit(`join:${bucket}`,30,3600)) fail(429,'Trop de tentatives pour rejoindre. Réessaie plus tard.');
       const room = await store.get(body.room);
       if (!room) fail(404,'Partie introuvable.');
+      if(body.action==='invitation') {
+        if(!validToken(body.invite) || hash(body.invite)!==room.invite_hash)fail(403,'Invitation invalide.');
+        // Invitation holders can learn whether joining is possible, without
+        // seeing players, moves, the track or any membership credentials.
+        return res.status(200).json({canJoin:!room.document.race && room.document.members.length<room.document.capacity});
+      }
       const next = transition(room,body,token);
       if (next === room) return res.status(200).json(snapshot(room,token));
       const saved = await store.save(next,room.version);

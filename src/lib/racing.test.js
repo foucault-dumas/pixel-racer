@@ -4,10 +4,10 @@ import { point, same, presetTrack, validateTrack, onRoad, finishAt, startPositio
 const polygon = coordinates => coordinates.map(([x,y])=>point(x,y));
 const square = () => ({outer:polygon([[2,2],[62,2],[62,38],[2,38]]),inner:polygon([[14,12],[50,12],[50,28],[14,28]]),finish:{a:point(30,2),b:point(30,12)},direction:1});
 function ready(track=square()) {
-  let race=makeRace(['Alice','Benoît'],()=>.99);
-  race=placePlayer(race,point(30,7),track);
-  race=placePlayer(race,point(30,8),track);
-  return race;
+  // Geometry fixtures start with both cars on the grid and no moves yet.
+  assert.equal(validateTrack(track),null);
+  const race=makeRace(['Alice','Benoît'],()=>.99);
+  return {...race,phase:'playing',players:race.players.map((p,i)=>({...p,position:point(30,7+i),path:[point(30,7+i)]}))};
 }
 function withPlayer(race, values){return {...race,players:race.players.map((p,i)=>i===0?{...p,...values}:p)};}
 test('the supplied circuit is valid and has six free starting places',()=>{
@@ -26,17 +26,60 @@ test('placement cannot leave the starting line or overwrite another player',()=>
   const track=square(),race=makeRace(['Alice','Bob'],()=>.99);
   assert.equal(placePlayer(race,point(31,7),track).active,0);
   const placed=placePlayer(race,point(30,7),track);
-  assert.equal(placePlayer(placed,point(30,7),track).active,1);
+  assert.equal(placed.active,0);
+  assert.equal(placePlayer(placed,point(30,8),track),placed);
+  const next=advanceRace(placed,point(30,7),track);
+  assert.equal(next.active,1);
+  assert.equal(placePlayer(next,point(30,7),track).players,next.players);
   assert.equal(placed.players[1].position,null);
 });
 test('six players overflow onto successive rear rows on a narrow track',()=>{
   const track={...square(),inner:polygon([[14,5],[50,5],[50,28],[14,28]]),finish:{a:point(30,2),b:point(30,5)}};
   assert.equal(validateTrack(track),null);
   let race=makeRace(['A','B','C','D','E','F'],()=>.99);
-  for(let i=0;i<6;i++)race=placePlayer(race,startPositions(track,race.players.map(p=>p.position).filter(Boolean))[0],track);
+  for(let i=0;i<6;i++){
+    race=placePlayer(race,startPositions(track,race.players.map(p=>p.position).filter(Boolean))[0],track);
+    race=advanceRace(race,race.players[race.active].position,track);
+  }
   assert.equal(race.phase,'playing');
   assert.equal(new Set(race.players.map(p=>`${p.position.x},${p.position.y}`)).size,6);
   assert.ok(race.players.some(p=>p.position.x<30));
+});
+
+for(const count of [2,6])test(`each of ${count} players places and immediately moves before passing the pen`,()=>{
+  const track=presetTrack();
+  let race=makeRace(Array.from({length:count},(_,i)=>String(i)),()=>.99);
+  for(let i=0;i<count;i++){
+    assert.equal(race.phase,'placement');assert.equal(race.active,i);
+    const start=startPositions(track,race.players.map(p=>p.position).filter(Boolean))[0];
+    race=placePlayer(race,start,track);
+    assert.equal(race.phase,'playing');assert.equal(race.active,i);
+    assert.ok(race.players.slice(i+1).every(p=>p.position===null));
+    const target=choices(race.players[i]).find(p=>!same(p,start) && inspectMove(race,p,track).valid && !inspectMove(race,p,track).crash) || start;
+    race=advanceRace(race,target,track);
+    assert.equal(race.players[i].turns,1);
+  }
+  assert.equal(race.active,0);assert.equal(race.phase,'playing');
+  assert.ok(race.players.every(p=>p.turns===1));
+});
+
+test('a first-move crash still passes to the next unplaced player',()=>{
+  const track=presetTrack();
+  let race=makeRace(['Alice','Bob'],()=>.99);
+  race=placePlayer(race,point(30,5),track);
+  race=advanceRace(race,point(30,4),track);
+  assert.equal(race.players[0].penalty,4);
+  assert.equal(race.active,1);assert.equal(race.phase,'placement');
+});
+
+test('a game saved during the previous placement sequence remains playable',()=>{
+  const track=square(), legacy=ready(track);
+  let race={...legacy,phase:'placement',active:1,players:legacy.players.map((p,i)=>i?{...p,position:null,path:[]}:p)};
+  race=placePlayer(race,point(30,8),track);
+  assert.equal(race.active,1);
+  race=advanceRace(race,point(31,8),track);
+  assert.equal(race.phase,'playing');assert.equal(race.active,0);
+  assert.equal(race.players[0].turns,0);
 });
 test('finish placement follows a valid cross-section of the two borders',()=>{
   const track=square(),finish=finishAt(point(30,6),track);

@@ -32,6 +32,7 @@ La **largeur minimale de la piste** est de **3 cases** en tout point du circuit.
 - Les positions de départ sont espacées d'au moins **une case**.
 - Si le nombre de joueurs excède les nœuds disponibles sur la ligne, les joueurs supplémentaires se placent sur une **rangée parallèle** en arrière (côté départ, pas côté arrivée).
 - L'ordre de jeu est déterminé avant le début de la partie (par exemple par tirage au sort).
+- Chaque joueur choisit sa place puis joue immédiatement son premier coup, avant que le suivant se place. Le placement ne consomme pas un tour. Une fois tous les premiers coups joués, le premier joueur reprend la main.
 
 ---
 

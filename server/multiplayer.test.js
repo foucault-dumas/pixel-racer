@@ -25,10 +25,15 @@ function fixture() {
     for(let i=1;i<capacity;i++)assert.equal((await join(i)).code,200);
     let state=(await call('read')).data;
     state=(await call('start',0,{version:state.version})).data;
-    while(state.race.phase==='placement') {
+    while(state.race.players.some(p=>p.turns===0)) {
+      const who=state.race.players[state.race.active].id;
       const p=startPositions(state.track,state.race.players.map(p=>p.position).filter(Boolean))[0];
-      const r=await call('place',state.race.players[state.race.active].id,{version:state.version,point:p});
+      const r=await call('place',who,{version:state.version,point:p});
       assert.equal(r.code,200);state=r.data;
+      assert.equal(state.race.players[state.race.active].id,who);
+      assert.equal((await call('move',(who+1)%capacity,{version:state.version,point:p})).code,403);
+      const moved=await call('move',who,{version:state.version,point:p});
+      assert.equal(moved.code,200);state=moved.data;
     }
     return state;
   }
@@ -68,6 +73,17 @@ test('simultaneous joins cannot overbook the last Bic',async()=>{
   assert.equal((await f.call('read')).data.members.length,2);
 });
 
+test('an invitation can reveal join availability without exposing a private game',async()=>{
+  const f=fixture();await f.create();
+  assert.equal((await f.call('invitation',1,{invite:token()})).code,403);
+  assert.deepEqual((await f.call('invitation',1,{invite:f.invite})).data,{canJoin:true});
+  await f.join(1);
+  assert.deepEqual((await f.call('invitation',2,{invite:f.invite})).data,{canJoin:false});
+  await f.call('start',0,{version:1});
+  assert.deepEqual((await f.call('invitation',2,{invite:f.invite})).data,{canJoin:false});
+  assert.equal((await f.call('read',2)).code,403);
+});
+
 for(const capacity of [2,6])test(`${capacity} separate credentials can join, place and play asynchronously`,async()=>{
   const f=fixture();let state=await f.setup(capacity);
   const previous=state.version;
@@ -105,7 +121,7 @@ test('concurrent double submits commit once; lost responses can be retried safel
   const retry=await f.call('move',active.id,command);
   assert.equal(retry.code,200);assert.equal(retry.data.version,state.version+1);
   const after=(await f.call('read')).data;
-  assert.equal(after.race.players.find(p=>p.id===active.id).turns,1);
+  assert.equal(after.race.players.find(p=>p.id===active.id).turns,active.turns+1);
 });
 
 test('foreign room credentials and cross-origin requests are rejected',async()=>{
