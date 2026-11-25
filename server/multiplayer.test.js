@@ -5,6 +5,8 @@ import { makeHandler } from './handler.js';
 import { memoryStore } from './memory-store.js';
 import { createRoom, cleanTrack } from './game.js';
 import { point, presetTrack, startPositions, choices, inspectMove, onRoad } from '../src/lib/racing.js';
+import { normalizeTrack, MAX_BORDER_POINTS, MAX_BORDER_SAMPLES, validateTrack } from '../src/lib/racing.js';
+import { freehandTrack } from '../test/fixtures/freehand-track.js';
 
 const token=()=>randomBytes(32).toString('base64url');
 function fixture() {
@@ -171,10 +173,36 @@ test('disabled backend fails closed and does not access the database',async()=>{
 
 test('input validation bounds geometry and rejects forged finish lines',()=>{
   const track=presetTrack();
-  assert.throws(()=>cleanTrack({...track,outer:Array(257).fill({x:1,y:1})},2),/256/);
+  assert.throws(()=>cleanTrack({...track,outer:Array(MAX_BORDER_SAMPLES+1).fill({x:1,y:1})},2),/4096/);
   assert.throws(()=>cleanTrack({...track,finish:{a:{x:20,y:20},b:{x:30,y:30}}},2),/départ/);
   assert.throws(()=>createRoom({room:randomUUID(),invite:token(),name:'',capacity:2,track},token()),/prénom/);
   assert.throws(()=>createRoom({room:randomUUID(),invite:token(),name:'A',capacity:7,track},token()),/2 à 6/);
+});
+
+test('an old open editor can submit its unsimplified freehand circuit and start online',async()=>{
+  const f=fixture(),raw=freehandTrack(),normalized=normalizeTrack(raw);
+  assert.ok(raw.outer.length>256);assert.ok(normalized.outer.length>256);
+  assert.ok(Buffer.byteLength(JSON.stringify({track:raw}))<30000);
+  assert.deepEqual(cleanTrack(raw,6),normalized);
+  const created=await f.call('create',0,{invite:f.invite,name:'Charles',capacity:2,track:raw});
+  assert.equal(created.code,201);
+  assert.deepEqual(created.data.track,normalized);
+  assert.deepEqual((await f.call('read')).data.track,normalized);
+  await f.join(1);
+  let state=(await f.call('start',0,{version:1})).data;
+  const driver=state.race.players[state.race.active].id;
+  const start=startPositions(state.track)[0];
+  state=(await f.call('place',driver,{version:state.version,point:start})).data;
+  const next=choices(state.race.players[state.race.active]).find(p=>{const c=inspectMove(state.race,p,state.track);return c.valid&&!c.crash;});
+  assert.equal((await f.call('move',driver,{version:state.version,point:next})).code,200);
+});
+
+test('server and editor return the same useful error for truly over-detailed borders',()=>{
+  const raw=freehandTrack();
+  raw.outer=Array.from({length:MAX_BORDER_POINTS+1},(_,i)=>point(32+31*Math.cos(i*2*Math.PI/(MAX_BORDER_POINTS+1)),20+19*Math.sin(i*2*Math.PI/(MAX_BORDER_POINTS+1))));
+  const message=validateTrack(raw);
+  assert.match(message,/extérieur.*513.*512/);
+  assert.throws(()=>cleanTrack(raw,2),error=>error.status===400 && error.message===message);
 });
 
 test('rate limit is enforced by the shared store before reading private state',async()=>{

@@ -1,5 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { simplifyBorder, normalizeTrack, MAX_BORDER_POINTS, MAX_BORDER_SAMPLES } from './racing.js';
+import { freehandTrack } from '../../test/fixtures/freehand-track.js';
 import { point, same, presetTrack, validateTrack, onRoad, finishAt, startPositions, makeRace, placePlayer, choices, inspectMove, advanceRace, firstBorderHit } from './racing.js';
 const polygon = coordinates => coordinates.map(([x,y])=>point(x,y));
 const square = () => ({outer:polygon([[2,2],[62,2],[62,38],[2,38]]),inner:polygon([[14,12],[50,12],[50,28],[14,28]]),finish:{a:point(30,2),b:point(30,12)},direction:1});
@@ -11,6 +13,41 @@ function ready(track=square()) {
   return {...race,phase:'playing',players:race.players.map((p,i)=>({...p,position:point(30,7+i),path:[point(30,7+i)]}))};
 }
 function withPlayer(race, values){return {...race,players:race.players.map((p,i)=>i===0?{...p,...values}:p)};}
+
+test('freehand normalization keeps bends, collisions and all playable grid points',()=>{
+  const raw=freehandTrack(),before=structuredClone(raw),track=normalizeTrack(raw);
+  assert.ok(raw.outer.length>256);
+  assert.ok(track.outer.length>256); // Raising the old cap is needed even after simplification.
+  assert.ok(track.outer.length<raw.outer.length);
+  assert.equal(validateTrack(raw),null);assert.equal(validateTrack(track),null);
+  assert.deepEqual(raw,before);assert.deepEqual(normalizeTrack(track),track);
+  assert.deepEqual(finishAt(point(30,6),track),raw.finish);
+  for(let x=0;x<=64;x++)for(let y=0;y<=40;y++)assert.equal(onRoad(point(x,y),raw),onRoad(point(x,y),track));
+  for(const target of [point(30,-5),point(70,7),point(30,20),point(30,7)]){
+    const race=withPlayer(ready(track),{velocity:point(target.x-30,target.y-7)});
+    assert.deepEqual(advanceRace(race,target,raw),advanceRace(race,target,track));
+  }
+});
+
+test('simplification removes only exact redundant points including the closing seam',()=>{
+  const raw=polygon([[5,0],[10,0],[10,0],[10,5],[10,10],[5,10],[0,10],[0,5],[0,0],[3,0],[5,0]]);
+  assert.deepEqual(simplifyBorder(raw),polygon([[10,0],[10,10],[0,10],[0,0]]));
+  assert.deepEqual(simplifyBorder(raw.slice().reverse()),polygon([[0,0],[0,10],[10,10],[10,0]]));
+  const tinyBend=polygon([[0,0],[5,0.000000001],[10,0],[10,10],[0,10]]);
+  assert.deepEqual(simplifyBorder(tinyBend),tinyBend);
+  const reversal=polygon([[0,0],[10,0],[5,0],[10,10],[0,10]]);
+  assert.deepEqual(simplifyBorder(reversal),reversal);
+  assert.match(validateTrack({...square(),outer:reversal}),/croisement/);
+});
+
+test('shared validation bounds raw and simplified geometry before expensive checks',()=>{
+  const raw=freehandTrack();
+  const excessive={...raw,outer:Array.from({length:MAX_BORDER_POINTS+1},(_,i)=>point(32+31*Math.cos(i*2*Math.PI/(MAX_BORDER_POINTS+1)),20+19*Math.sin(i*2*Math.PI/(MAX_BORDER_POINTS+1))))};
+  assert.match(validateTrack(excessive),/extérieur.*513.*512/);
+  assert.match(validateTrack({...raw,inner:Array(MAX_BORDER_SAMPLES+1).fill(point(20,20))}),/intérieur.*4096/);
+  for(const invalid of [null,point(NaN,2),point(Infinity,2),{x:'2',y:2}])assert.match(validateTrack({...raw,outer:[invalid,...raw.outer]}),/invalide/);
+  assert.match(validateTrack({...raw,outer:[point(-1,0),...raw.outer]}),/dépasser/);
+});
 test('the supplied circuit is valid and has six free starting places',()=>{
   const track=presetTrack();assert.equal(validateTrack(track),null);
   assert.ok(startPositions(track).length>=6);

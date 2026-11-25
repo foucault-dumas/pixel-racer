@@ -4,6 +4,7 @@ import { COLS, ROWS, PENS, point, same, presetTrack, validateTrack, finishAt, ra
 import Notebook from './Notebook';
 import Rules from './Rules';
 import { resumeLabel } from '../lib/online';
+import { simplifyBorder, MAX_BORDER_SAMPLES } from '../lib/racing';
 
 export default function GameGrid({onOnline, recentRooms=[], onHideRoom}) {
   const [removedRoom,setRemovedRoom] = useState(null);
@@ -56,7 +57,8 @@ export default function GameGrid({onOnline, recentRooms=[], onHideRoom}) {
   }
   function closeBorder() {
     if(draft.length<3){setMessage('Il faut au moins trois points pour fermer une boucle.');return;}
-    const closed=same(draft[0],draft.at(-1))?draft.slice(0,-1):draft;
+    if(draft.length>MAX_BORDER_SAMPLES){setMessage(`Ce bord contient trop de points de dessin (${MAX_BORDER_SAMPLES} maximum).`);return;}
+    const closed=simplifyBorder(draft);
     const next={...track,[tool]:closed,finish:null};
     setTrack(next);setDraft([]);
     if(tool==='outer'){setTool('inner');setMessage('Trace une deuxième boucle à l’intérieur. Laisse au moins trois carreaux de piste.');}
