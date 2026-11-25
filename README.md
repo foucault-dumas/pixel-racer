@@ -9,7 +9,7 @@ Site : https://pixel-racer-six.vercel.app
 1. Choisir 2 à 6 joueurs et leurs prénoms. Chaque Bic a sa couleur.
 2. Garder le circuit de la récré ou dessiner le vôtre, puis choisir le sens de course.
 3. Cliquer sur « On fait la course ». L’ordre est tiré au sort.
-4. Le joueur actif se place sur un point libre du départ, puis joue immédiatement son premier coup. Le suivant fait de même. Si nécessaire, une rangée arrière apparaît.
+4. Le joueur actif choisit un point de départ différent de ceux des joueurs précédents, même s’ils ont déjà avancé, puis joue immédiatement son premier coup. Le suivant fait de même. Si nécessaire, une rangée arrière apparaît.
 5. Cliquer une intersection puis « Tracer mon coup ». Avec l’aide activée, le pavé de neuf flèches permet aussi de choisir une destination.
 6. Faire un tour complet et dépasser la ligne dans le bon sens pour gagner. La revanche conserve le circuit et les joueurs.
 

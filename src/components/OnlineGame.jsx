@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Notebook from './Notebook';
 import Rules from './Rules';
-import { PENS, choices, inspectMove, naturalPoint, raceTangent, startPositions, same, presetTrack } from '../lib/racing';
+import { PENS, choices, inspectMove, naturalPoint, raceTangent, raceStartPositions, same, presetTrack } from '../lib/racing';
 import { newToken, savedRooms, remember, roomLink, roomRequest, parsePersonalLink, resumeView, roomPeople } from '../lib/online';
 import { createTurnObserver } from '../lib/turn-notifications';
 
@@ -31,7 +31,7 @@ export default function OnlineGame({options,onClose,onRecover,penAudio,soundEnab
   const myTurn = !!player && player.id===data.me && phase!=='finished';
   const moves = phase==='playing' && myTurn ? choices(player) : [];
   const center = moves.length ? naturalPoint(player) : null;
-  const startNodes = phase==='placement' && myTurn ? startPositions(track,race.players.map(p=>p.position).filter(Boolean)) : [];
+  const startNodes = phase==='placement' && myTurn ? raceStartPositions(track,race.players) : [];
   const moveCheck = selected && phase==='playing' ? inspectMove(race,selected,track) : null;
   const winner = phase==='finished' ? race.players.find(p=>p.id===race.winner) : null;
   const available = !busy && connection==='ok';

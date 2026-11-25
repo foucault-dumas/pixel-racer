@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { simplifyBorder, normalizeTrack, MAX_BORDER_POINTS, MAX_BORDER_SAMPLES } from './racing.js';
 import { freehandTrack } from '../../test/fixtures/freehand-track.js';
-import { point, same, presetTrack, validateTrack, onRoad, finishAt, startPositions, makeRace, placePlayer, choices, inspectMove, advanceRace, firstBorderHit } from './racing.js';
+import { point, same, presetTrack, validateTrack, onRoad, finishAt, startPositions, raceStartPositions, makeRace, placePlayer, choices, inspectMove, advanceRace, firstBorderHit } from './racing.js';
 const polygon = coordinates => coordinates.map(([x,y])=>point(x,y));
 const square = () => ({outer:polygon([[2,2],[62,2],[62,38],[2,38]]),inner:polygon([[14,12],[50,12],[50,28],[14,28]]),finish:{a:point(30,2),b:point(30,12)},direction:1});
 const pageTrack = () => ({...square(),outer:polygon([[0,0],[64,0],[64,40],[0,40]]),finish:{a:point(30,0),b:point(30,12)}});
@@ -68,7 +68,7 @@ test('the entire page perimeter is a valid outer wall with a usable start',()=>{
   assert.deepEqual(finishAt(point(5,20),track),{a:point(0,20),b:point(14,20)});
   let race=makeRace(['A','B','C','D','E','F'],()=>.99);
   for(let i=0;i<6;i++){
-    const start=startPositions(track,race.players.flatMap(p=>p.path))[0];
+    const start=raceStartPositions(track,race.players)[0];
     assert.ok(onRoad(start,track));
     race=placePlayer(race,start,track);
     race=advanceRace(race,point(start.x+1,start.y),track);
@@ -133,17 +133,44 @@ test('placement cannot leave the starting line or overwrite another player',()=>
   assert.equal(placePlayer(next,point(30,7),track).players,next.players);
   assert.equal(placed.players[1].position,null);
 });
-test('six players overflow onto successive rear rows on a narrow track',()=>{
-  const track={...square(),inner:polygon([[14,5],[50,5],[50,28],[14,28]]),finish:{a:point(30,2),b:point(30,5)}};
+test('a vacated starting place stays reserved for placement but can be driven over',()=>{
+  const track=square(),start=point(30,7);
+  let race=makeRace(['Alice','Bob'],()=>.99);
+  race=advanceRace(placePlayer(race,start,track),point(31,7),track);
+  const rejected=placePlayer(race,start,track);
+  assert.equal(rejected.phase,'placement');
+  assert.equal(rejected.players,race.players);
+  race=placePlayer(race,point(30,8),track);
+  assert.equal(race.phase,'playing');assert.equal(race.active,1);
+  race=advanceRace(race,start,track);
+  assert.deepEqual(race.players[1].position,start);
+  assert.deepEqual(race.players[1].path,[point(30,8),start]);
+  assert.equal(race.active,0);
+});
+
+test('placement excludes both an original start and a car now occupying another start',()=>{
+  const track=square();
+  let race=makeRace(['Alice','Bob'],()=>.99);
+  race=advanceRace(placePlayer(race,point(30,7),track),point(30,8),track);
+  for(const y of [7,8])assert.equal(placePlayer(race,point(30,y),track).players,race.players);
+  assert.deepEqual(placePlayer(race,point(30,9),track).players[1].position,point(30,9));
+});
+
+for(const direction of [1,-1])test(`six players keep distinct starts on rear rows while moving immediately in direction ${direction}`,()=>{
+  const track={...square(),direction,inner:polygon([[14,5],[50,5],[50,28],[14,28]]),finish:{a:point(30,2),b:point(30,5)}};
   assert.equal(validateTrack(track),null);
   let race=makeRace(['A','B','C','D','E','F'],()=>.99);
   for(let i=0;i<6;i++){
-    race=placePlayer(race,startPositions(track,race.players.map(p=>p.position).filter(Boolean))[0],track);
-    race=advanceRace(race,race.players[race.active].position,track);
+    const start=raceStartPositions(track,race.players)[0];
+    race=placePlayer(race,start,track);
+    race=advanceRace(race,point(start.x+direction,start.y),track);
+    assert.equal(race.players[i].turns,1);
+    assert.equal(race.players[i].penalty,0);
   }
   assert.equal(race.phase,'playing');
   assert.equal(new Set(race.players.map(p=>`${p.position.x},${p.position.y}`)).size,6);
-  assert.ok(race.players.some(p=>p.position.x<30));
+  assert.equal(new Set(race.players.map(p=>`${p.path[0].x},${p.path[0].y}`)).size,6);
+  assert.ok(race.players.some(p=>(p.path[0].x-30)*direction<0));
 });
 
 for(const count of [2,6])test(`each of ${count} players places and immediately moves before passing the pen`,()=>{
@@ -151,7 +178,7 @@ for(const count of [2,6])test(`each of ${count} players places and immediately m
   let race=makeRace(Array.from({length:count},(_,i)=>String(i)),()=>.99);
   for(let i=0;i<count;i++){
     assert.equal(race.phase,'placement');assert.equal(race.active,i);
-    const start=startPositions(track,race.players.map(p=>p.position).filter(Boolean))[0];
+    const start=raceStartPositions(track,race.players)[0];
     race=placePlayer(race,start,track);
     assert.equal(race.phase,'playing');assert.equal(race.active,i);
     assert.ok(race.players.slice(i+1).every(p=>p.position===null));
@@ -161,6 +188,7 @@ for(const count of [2,6])test(`each of ${count} players places and immediately m
   }
   assert.equal(race.active,0);assert.equal(race.phase,'playing');
   assert.ok(race.players.every(p=>p.turns===1));
+  assert.equal(new Set(race.players.map(p=>`${p.path[0].x},${p.path[0].y}`)).size,count);
 });
 
 test('a first-move crash still passes to the next unplaced player',()=>{
