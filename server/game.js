@@ -1,5 +1,5 @@
 import { createHash, randomInt } from 'node:crypto';
-import { COLS, ROWS, validateTrack, finishAt, same, startPositions, makeRace, placePlayer, advanceRace } from '../src/lib/racing.js';
+import { COLS, ROWS, validateTrack, normalizeTrack, finishAt, same, startPositions, makeRace, placePlayer, advanceRace } from '../src/lib/racing.js';
 
 export class GameError extends Error {
   constructor(status, message) { super(message); this.status = status; }
@@ -15,12 +15,9 @@ function nameOf(name) {
 }
 export function cleanTrack(input, capacity) {
   if (!input || ![1, -1].includes(input.direction)) fail(400, 'Sens de course invalide.');
-  for (const key of ['outer', 'inner']) {
-    if (!Array.isArray(input[key]) || input[key].length < 3 || input[key].length > 256 || !input[key].every(coord)) fail(400, 'Circuit invalide (256 sommets maximum par bord).');
-  }
-  const track = { outer: input.outer.map(({x,y})=>({x,y})), inner: input.inner.map(({x,y})=>({x,y})), direction: input.direction };
-  const error = validateTrack(track);
+  const error = validateTrack(input);
   if (error) fail(400, error);
+  const track = normalizeTrack({outer:input.outer,inner:input.inner,direction:input.direction});
   if (!coord(input.finish?.a) || !coord(input.finish?.b)) fail(400, 'Ligne de départ manquante.');
   const {a,b} = input.finish;
   const canonical = finishAt({x:(a.x+b.x)/2,y:(a.y+b.y)/2},track);

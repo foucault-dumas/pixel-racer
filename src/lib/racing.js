@@ -1,6 +1,8 @@
 // Pure racing rules. Coordinates are notebook intersections, not cell centres.
 export const COLS = 64;
 export const ROWS = 40;
+export const MAX_BORDER_POINTS = 512;
+export const MAX_BORDER_SAMPLES = 4096;
 const EPS = 1e-7;
 const TAU = Math.PI * 2;
 export const PENS = [
@@ -15,6 +17,29 @@ const cross = (a, b) => a.x * b.y - a.y * b.x;
 const dot = (a, b) => a.x * b.x + a.y * b.y;
 const mix = (a, b, t) => point(a.x + (b.x - a.x) * t, a.y + (b.y - a.y) * t);
 const edges = poly => poly.map((a, i) => [a, poly[(i + 1) % poly.length]]);
+
+// Keep the exact contour, including reversals and every bend. Only remove
+// repeated samples and points strictly between two collinear neighbors.
+export function simplifyBorder(poly) {
+  const exactSame = (a,b) => a && b && a.x === b.x && a.y === b.y;
+  const between = (a,b,c) => cross(sub(b,a),sub(c,b)) === 0 && dot(sub(b,a),sub(c,b)) > 0;
+  const result=[];
+  for(const p of poly) {
+    if(exactSame(result.at(-1),p))continue;
+    while(result.length>=2 && between(result.at(-2),result.at(-1),p))result.pop();
+    result.push(point(p.x,p.y));
+  }
+  if(result.length>1 && exactSame(result[0],result.at(-1)))result.pop();
+  // Also simplify the closing segment when drawing started on a straight.
+  while(result.length>=3) {
+    if(between(result.at(-2),result.at(-1),result[0]))result.pop();
+    else if(between(result.at(-1),result[0],result[1]))result.shift();
+    else break;
+  }
+  return result;
+}
+
+export const normalizeTrack = track => ({...track,outer:simplifyBorder(track.outer),inner:simplifyBorder(track.inner)});
 
 export function distanceToSegment(p, a, b) {
   const ab = sub(b, a);
@@ -68,9 +93,17 @@ function simplePolygon(poly) {
 }
 
 export function validateTrack(track) {
+  for (const [key,label] of [['outer','extérieur'],['inner','intérieur']]) {
+    const poly=track[key];
+    if(!Array.isArray(poly) || poly.length<3)return `Le bord ${label} doit former une boucle sans croisement.`;
+    if(poly.length>MAX_BORDER_SAMPLES)return `Le bord ${label} contient trop de points de dessin (${MAX_BORDER_SAMPLES} maximum).`;
+    if(poly.some(p=>!p || !Number.isFinite(p.x) || !Number.isFinite(p.y)))return `Le bord ${label} contient un point invalide.`;
+    if(poly.some(p=>p.x<0 || p.x>COLS || p.y<0 || p.y>ROWS))return 'Le circuit peut toucher le bord de la feuille, mais pas le dépasser.';
+  }
+  track=normalizeTrack(track);
   for (const [key, label] of [['outer', 'extérieur'], ['inner', 'intérieur']]) {
+    if(track[key].length>MAX_BORDER_POINTS)return `Le bord ${label} est trop détaillé : ${track[key].length} sommets après simplification, pour ${MAX_BORDER_POINTS} maximum. Simplifie quelques virages.`;
     if (!simplePolygon(track[key])) return `Le bord ${label} doit former une boucle sans croisement.`;
-    if (track[key].some(p => p.x < 0 || p.x > COLS || p.y < 0 || p.y > ROWS)) return 'Le circuit peut toucher le bord de la feuille, mais pas le dépasser.';
   }
   if (!track.inner.every(p => inPolygon(p, track.outer))) return 'Le bord intérieur doit être entièrement dans le bord extérieur.';
   for (const [a, b] of edges(track.outer)) for (const [c, d] of edges(track.inner)) {

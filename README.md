@@ -25,6 +25,8 @@ Le bord extérieur peut longer les limites de la feuille, sans marge, y compris 
 
 ## Commandes et accessibilité
 
+Les tracés à main levée sont allégés sans déformation : les points intermédiaires exactement alignés et les doublons consécutifs sont retirés, mais tous les virages sont conservés. L’éditeur et le serveur partagent la limite de 512 sommets par contour après simplification (4 096 points bruts maximum). Les anciens onglets peuvent envoyer leur circuit non simplifié : le serveur l’allège avant de l’enregistrer. Une limite dépassée est signalée dans l’éditeur avant de proposer une partie en ligne.
+
 - Souris ou tactile : sélectionner une intersection, puis confirmer le coup.
 - Clavier : focus sur le cahier, flèches pour déplacer le curseur, Entrée pour jouer, Échap pour annuler la sélection.
 - Placement au clavier : flèches entre les places libres puis Entrée ; un bouton propose aussi une place libre.
