@@ -18,6 +18,8 @@ Le circuit est composé de **deux tracés fermés** :
 - un **bord extérieur**
 - un **bord intérieur**
 
+Le bord extérieur peut suivre les limites de la feuille, y compris ses coins : aucune marge n’est obligatoire. Le bord de la feuille devient alors un mur du circuit et applique la même pénalité que les autres bords. Le bord intérieur reste strictement à l’intérieur du bord extérieur.
+
 La **largeur minimale de la piste** est de **3 cases** en tout point du circuit. Cette contrainte est indispensable pour que les voitures puissent se croiser sans ambiguïté.
 
 ### La ligne de départ / arrivée

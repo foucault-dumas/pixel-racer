@@ -21,6 +21,8 @@ L’aide au calcul se masque pour retrouver le jeu de tête. Le petit cercle vid
 
 Cliquer les sommets d’une boucle ou tracer au doigt / à la souris, puis fermer le bord. Répéter pour le bord intérieur, avec au moins trois carreaux entre les deux. Les boucles qui se croisent sont refusées. Enfin, cliquer dans la piste pour placer une ligne de départ horizontale ou verticale reliant les deux bords. Le bouton « Reprendre le circuit de la récré » permet de revenir au modèle.
 
+Le bord extérieur peut longer les limites de la feuille, sans marge, y compris dans les coins. Toucher ou franchir ce mur replace la voiture dans la piste avant le choc, remet sa vitesse à zéro et limite ses quatre prochains coups à un carreau. Si l’inertie envoie les neuf destinations hors de la feuille, les flèches du panneau permettent quand même de jouer. Sans l’aide au calcul, « Je suis bloqué : montrer mon point d’inertie » permet de sélectionner puis confirmer la sortie, en local comme en ligne.
+
 ## Commandes et accessibilité
 
 - Souris ou tactile : sélectionner une intersection, puis confirmer le coup.

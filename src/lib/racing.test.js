@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { point, same, presetTrack, validateTrack, onRoad, finishAt, startPositions, makeRace, placePlayer, choices, inspectMove, advanceRace, firstBorderHit } from './racing.js';
 const polygon = coordinates => coordinates.map(([x,y])=>point(x,y));
 const square = () => ({outer:polygon([[2,2],[62,2],[62,38],[2,38]]),inner:polygon([[14,12],[50,12],[50,28],[14,28]]),finish:{a:point(30,2),b:point(30,12)},direction:1});
+const pageTrack = () => ({...square(),outer:polygon([[0,0],[64,0],[64,40],[0,40]]),finish:{a:point(30,0),b:point(30,12)}});
 function ready(track=square()) {
   // Geometry fixtures start with both cars on the grid and no moves yet.
   assert.equal(validateTrack(track),null);
@@ -21,6 +22,68 @@ test('track validation rejects crossed, unnested and narrow boundaries',()=>{
   assert.match(validateTrack({...square(),outer:polygon([[2,2],[62,38],[62,2],[2,38]])}),/croisement/);
   assert.match(validateTrack({...square(),inner:polygon([[1,12],[50,12],[50,28],[1,28]])}),/entièrement/);
   assert.match(validateTrack({...square(),inner:polygon([[4,12],[50,12],[50,28],[4,28]])}),/trois/);
+});
+
+test('the entire page perimeter is a valid outer wall with a usable start',()=>{
+  const track=pageTrack();
+  assert.equal(validateTrack(track),null);
+  assert.deepEqual(finishAt(point(30,6),track),track.finish);
+  assert.deepEqual(finishAt(point(5,20),track),{a:point(0,20),b:point(14,20)});
+  let race=makeRace(['A','B','C','D','E','F'],()=>.99);
+  for(let i=0;i<6;i++){
+    const start=startPositions(track,race.players.flatMap(p=>p.path))[0];
+    assert.ok(onRoad(start,track));
+    race=placePlayer(race,start,track);
+    race=advanceRace(race,point(start.x+1,start.y),track);
+    assert.equal(race.players[i].turns,1);
+    assert.equal(race.players[i].penalty,0);
+  }
+  assert.equal(race.phase,'playing');
+});
+
+test('allowing page edges still rejects outside, touching inner and narrow borders',()=>{
+  const track=pageTrack();
+  for(const [dx,dy] of [[-1,0],[1,0],[0,-1],[0,1]]){
+    assert.match(validateTrack({...track,outer:track.outer.map(p=>point(p.x+dx,p.y+dy))}),/dépasser/);
+  }
+  assert.match(validateTrack({...track,inner:polygon([[0,12],[50,12],[50,28],[0,28]])}),/entièrement/);
+  assert.match(validateTrack({...track,inner:polygon([[2,12],[50,12],[50,28],[2,28]])}),/trois/);
+});
+
+for(const [name,start,wall,outside,recovered] of [
+  ['left',[2,7],[0,7],[-4,7],[1,7]],
+  ['right',[62,7],[64,7],[68,7],[63,7]],
+  ['top',[30,2],[30,0],[30,-4],[30,1]],
+  ['bottom',[30,38],[30,40],[30,44],[30,39]],
+  ['top-left',[2,2],[0,0],[-4,-4],[1,1]],
+  ['top-right',[62,2],[64,0],[68,-4],[63,1]],
+  ['bottom-left',[2,38],[0,40],[-4,44],[1,39]],
+  ['bottom-right',[62,38],[64,40],[68,44],[63,39]],
+])test(`touching or crossing the ${name} page wall recovers inside with four slow moves`,()=>{
+  const track=pageTrack(),position=point(...start);
+  for(const destination of [wall,outside]){
+    const target=point(...destination);
+    const race=withPlayer(ready(track),{position,path:[position],velocity:point(target.x-position.x,target.y-position.y)});
+    if(destination===outside)assert.ok(choices(race.players[0]).every(p=>p.x<0||p.x>64||p.y<0||p.y>40));
+    const next=advanceRace(race,target,track),player=next.players[0];
+    assert.equal(next.active,1);
+    assert.equal(player.penalty,4);
+    assert.deepEqual(player.velocity,point(0,0));
+    assert.deepEqual(player.position,point(...recovered));
+    assert.ok(onRoad(player.position,track));
+    assert.equal(firstBorderHit(position,player.position,track),null);
+    assert.ok(same(player.crashes[0],point(...wall)));
+    assert.equal(next.winner,null);
+  }
+});
+
+test('page-wall recovery does not land on another car',()=>{
+  const track=pageTrack(),position=point(62,7);
+  const race=withPlayer(ready(track),{position,path:[position],velocity:point(6,0)});
+  race.players[1]={...race.players[1],position:point(63,7)};
+  const next=advanceRace(race,point(68,7),track);
+  assert.deepEqual(next.players[0].position,position);
+  assert.equal(next.players[0].penalty,4);
 });
 test('placement cannot leave the starting line or overwrite another player',()=>{
   const track=square(),race=makeRace(['Alice','Bob'],()=>.99);

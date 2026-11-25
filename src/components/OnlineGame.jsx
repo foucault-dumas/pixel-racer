@@ -192,6 +192,7 @@ export default function OnlineGame({options,onClose,onRecover,penAudio,soundEnab
             <p className="selection-note">{selected?`Point choisi : ${selected.x} · ${selected.y}`:'Choisis une intersection du cahier.'}</p>
             {moveCheck && (!moveCheck.valid || moveCheck.crash) && <p className="move-warning">{moveCheck.valid?'Sortie de piste : quatre coups au ralenti.':moveCheck.reason}</p>}
             <button className="primary" style={{background:player.color}} disabled={!available || !moveCheck?.valid} onClick={commit}>{busy?'Enregistrement…':'Tracer mon coup ↗'}</button>
+            {!help && <button className="text-button" disabled={!available} onClick={()=>setSelected(naturalPoint(player))}>Je suis bloqué : montrer mon point d’inertie</button>}
           </>}
           {race && !winner && <label className="toggle"><input type="checkbox" checked={help} onChange={e=>setHelp(e.target.checked)}/><span>Aide au calcul<small>Les neuf points pour retrouver la main.</small></span></label>}
           {winner && <><div className="winner-doodle" aria-hidden="true">★</div><p className="winner-summary">Un tour complet en {winner.turns} coups.<br/>Les traits restent dans ce cahier.</p><button className="primary" onClick={onClose}>Préparer une autre course ↗</button></>}
