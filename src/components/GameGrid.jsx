@@ -52,7 +52,7 @@ export default function GameGrid({onOnline, recentRooms=[], onHideRoom}) {
   function startDrawing() {
     setTrack({outer:[],inner:[],finish:null,direction:track.direction});
     setEditing(true);setTool('outer');setDraft([]);setSelected(null);setNotebook(n=>n+1);
-    setMessage('Trace le bord extérieur : clique les coins ou dessine en maintenant le doigt.');
+    setMessage('Trace le bord extérieur : les bords de la feuille peuvent servir de murs.');
   }
   function closeBorder() {
     if(draft.length<3){setMessage('Il faut au moins trois points pour fermer une boucle.');return;}
@@ -111,6 +111,7 @@ export default function GameGrid({onOnline, recentRooms=[], onHideRoom}) {
           <p className="small-note">Un lien à envoyer. Chacun joue quand il peut.</p>
           <div className="circuit-tools"><p>Le circuit</p>{editing?<>
             <div className="tool-tabs">{[['outer','Extérieur'],['inner','Intérieur'],['finish','Départ']].map(([key,label])=><button key={key} aria-pressed={tool===key} onClick={()=>{setTool(key);setDraft([]);}}>{label}</button>)}</div>
+            <p className="small-note">{tool==='finish'?'Un simple clic dans la piste pose la ligne de départ entre les deux bords. Pas besoin de la tracer.':tool==='outer'?'Clique les coins ou trace en maintenant le doigt. Tu peux suivre les bords de la feuille : ils servent de murs.':'Trace une boucle à l’intérieur du bord extérieur. Garde au moins trois carreaux de piste entre les deux.'}</p>
             {tool!=='finish' && <><button className="secondary" onClick={closeBorder} disabled={draft.length<3}>Fermer ce bord</button><div className="small-actions"><button disabled={!draft.length} onClick={()=>setDraft(d=>d.slice(0,-1))}>↶ Dernier point</button><button onClick={()=>{setDraft([]);setTrack(t=>({...t,[tool]:[],finish:null}));}}>Effacer ce bord</button></div></>}
             {error && <p className="editor-error">{error}</p>}<button className="text-button" onClick={usePreset}>Reprendre le circuit de la récré</button>
           </>:<><button className="secondary" onClick={startDrawing}>✎ Dessiner notre circuit</button><button className="text-button" onClick={()=>setTrack(t=>({...t,direction:-t.direction}))}>Sens {track.direction===1?'horaire':'antihoraire'} <span>⇄</span></button><button className="text-button" onClick={()=>{setEditing(true);setTool('finish');setDraft([]);setMessage('Clique dans la piste pour déplacer le départ.');}}>Déplacer la ligne de départ</button></>}</div>

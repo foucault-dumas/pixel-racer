@@ -70,7 +70,7 @@ function simplePolygon(poly) {
 export function validateTrack(track) {
   for (const [key, label] of [['outer', 'extérieur'], ['inner', 'intérieur']]) {
     if (!simplePolygon(track[key])) return `Le bord ${label} doit former une boucle sans croisement.`;
-    if (track[key].some(p => p.x < 1 || p.x > COLS - 1 || p.y < 1 || p.y > ROWS - 1)) return 'Garde les bords à l’intérieur du cahier.';
+    if (track[key].some(p => p.x < 0 || p.x > COLS || p.y < 0 || p.y > ROWS)) return 'Le circuit peut toucher le bord de la feuille, mais pas le dépasser.';
   }
   if (!track.inner.every(p => inPolygon(p, track.outer))) return 'Le bord intérieur doit être entièrement dans le bord extérieur.';
   for (const [a, b] of edges(track.outer)) for (const [c, d] of edges(track.inner)) {

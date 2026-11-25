@@ -4,7 +4,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { makeHandler } from './handler.js';
 import { memoryStore } from './memory-store.js';
 import { createRoom, cleanTrack } from './game.js';
-import { presetTrack, startPositions, choices, inspectMove } from '../src/lib/racing.js';
+import { point, presetTrack, startPositions, choices, inspectMove, onRoad } from '../src/lib/racing.js';
 
 const token=()=>randomBytes(32).toString('base64url');
 function fixture() {
@@ -54,6 +54,33 @@ test('private state requires membership; snapshots never disclose credentials',a
   const summary=await f.call('read',0,{summary:'1'});
   assert.deepEqual(summary.data,{id:f.room,me:0,members:[{id:0,name:'Charles'}],capacity:2});
   assert.equal((await f.call('read',1,{summary:'1'})).code,403);
+});
+
+test('online rooms accept page walls and persist a crash and four own penalty moves',async()=>{
+  const f=fixture();
+  const track={...presetTrack(),outer:[point(0,0),point(64,0),point(64,40),point(0,40)],finish:{a:point(30,0),b:point(30,12)}};
+  assert.deepEqual(cleanTrack(track,6),track);
+  const created=await f.call('create',0,{invite:f.invite,name:'Charles',capacity:2,track});
+  assert.equal(created.code,201);
+  await f.join(1);
+  let state=(await f.call('start',0,{version:1})).data;
+  const driver=state.race.players[state.race.active].id;
+  state=(await f.call('place',driver,{version:state.version,point:point(30,1)})).data;
+  const crashed=await f.call('move',driver,{version:state.version,point:point(30,0)});
+  assert.equal(crashed.code,200);state=crashed.data;
+  assert.equal(state.race.players.find(p=>p.id===driver).penalty,4);
+  const opponent=1-driver;
+  state=(await f.call('place',opponent,{version:state.version,point:point(30,6)})).data;
+  for(let remaining=3;remaining>=0;remaining--){
+    state=(await f.call('move',opponent,{version:state.version,point:point(30,6)})).data;
+    const player=state.race.players.find(p=>p.id===driver);
+    assert.equal((await f.call('move',driver,{version:state.version,point:point(player.position.x+2,1)})).code,400);
+    const moved=await f.call('move',driver,{version:state.version,point:point(player.position.x+1,1)});
+    assert.equal(moved.code,200);state=moved.data;
+    const saved=(await f.call('read',driver)).data.race.players.find(p=>p.id===driver);
+    assert.equal(saved.penalty,remaining);
+    assert.ok(onRoad(saved.position,track));
+  }
 });
 
 test('invalid invitations, capacity and host authority are enforced',async()=>{
