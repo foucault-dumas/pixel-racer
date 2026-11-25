@@ -110,10 +110,76 @@ test('an invitation can reveal join availability without exposing a private game
   assert.equal((await f.call('invitation',1,{invite:token()})).code,403);
   assert.deepEqual((await f.call('invitation',1,{invite:f.invite})).data,{canJoin:true});
   await f.join(1);
-  assert.deepEqual((await f.call('invitation',2,{invite:f.invite})).data,{canJoin:false});
+  assert.deepEqual((await f.call('invitation',2,{invite:f.invite})).data,{canJoin:false,reason:'full'});
   await f.call('start',0,{version:1});
-  assert.deepEqual((await f.call('invitation',2,{invite:f.invite})).data,{canJoin:false});
+  assert.deepEqual((await f.call('invitation',2,{invite:f.invite})).data,{canJoin:false,reason:'started'});
   assert.equal((await f.call('read',2)).code,403);
+});
+
+test('a full two-player lobby can expand to four and keep its track, seats and invitation',async()=>{
+  const f=fixture();await f.create();await f.join(1);
+  const before=await f.store.get(f.room);
+  assert.deepEqual((await f.call('invitation',2,{invite:f.invite})).data,{canJoin:false,reason:'full'});
+  const requestId=randomUUID();
+  const expanded=await f.call('capacity',0,{version:1,capacity:4,requestId});
+  assert.equal(expanded.code,200);assert.equal(expanded.data.capacity,4);
+  const after=await f.store.get(f.room);
+  assert.deepEqual(after.document.members,before.document.members);
+  assert.deepEqual(after.document.track,before.document.track);
+  assert.equal(after.invite_hash,before.invite_hash);
+  assert.equal((await f.call('capacity',0,{version:1,capacity:4,requestId})).data.version,2);
+  assert.equal((await f.call('read',1)).data.me,1);
+  assert.deepEqual((await f.call('invitation',2,{invite:f.invite})).data,{canJoin:true});
+  assert.equal((await f.join(2)).code,200);assert.equal((await f.join(3)).code,200);
+  assert.equal((await f.join(4)).code,409);
+  let state=(await f.call('read')).data;
+  const started=await f.call('start',0,{version:state.version});
+  assert.equal(started.code,200);state=started.data;
+  assert.equal(state.race.players.length,4);
+  for(let i=0;i<4;i++){
+    const driver=state.race.players[state.race.active].id;
+    const p=startPositions(state.track,state.race.players.map(p=>p.position).filter(Boolean))[0];
+    state=(await f.call('place',driver,{version:state.version,point:p})).data;
+    const moved=await f.call('move',driver,{version:state.version,point:p});
+    assert.equal(moved.code,200);state=moved.data;
+  }
+  assert.ok(state.race.players.every(p=>p.turns===1));
+});
+
+test('only the host can resize before starting, within two to six and without removing anyone',async()=>{
+  const f=fixture();await f.create();await f.join(1);
+  assert.equal((await f.call('capacity',1,{version:1,capacity:4})).code,403);
+  assert.equal((await f.call('capacity',2,{version:1,capacity:4})).code,403);
+  for(const capacity of [1,7,2.5,'4',null])assert.equal((await f.call('capacity',0,{version:1,capacity})).code,400);
+  assert.equal((await f.call('capacity',0,{version:0,capacity:4})).code,409);
+  assert.equal((await f.call('read')).data.version,1);
+  assert.equal((await f.call('capacity',0,{version:1,capacity:6})).code,200);
+  assert.equal((await f.call('capacity',0,{version:2,capacity:3})).code,200);
+  await f.join(2);
+  assert.equal((await f.call('capacity',0,{version:4,capacity:2})).code,409);
+  assert.equal((await f.call('start',0,{version:4})).code,200);
+  assert.equal((await f.call('capacity',0,{version:5,capacity:4})).code,409);
+  assert.equal((await f.call('read')).data.capacity,3);
+});
+
+test('a simultaneous join and capacity reduction never removes or overbooks a player',async()=>{
+  const f=fixture();await f.create(3);await f.join(1);
+  const results=await Promise.all([f.call('capacity',0,{version:1,capacity:2}),f.join(2)]);
+  assert.deepEqual(results.map(r=>r.code).sort(),[200,409]);
+  const state=(await f.call('read')).data;
+  assert.equal(state.version,2);
+  assert.equal(state.members.length,state.capacity);
+  assert.equal(state.members[0].id,0);assert.equal(state.members[1].id,1);
+});
+
+test('starting and adding places simultaneously commits only one coherent lobby transition',async()=>{
+  const f=fixture();await f.create();await f.join(1);
+  const results=await Promise.all([f.call('capacity',0,{version:1,capacity:4}),f.call('start',0,{version:1})]);
+  assert.deepEqual(results.map(r=>r.code).sort(),[200,409]);
+  const state=(await f.call('read')).data;
+  assert.equal(state.version,2);
+  if(state.race){assert.equal(state.capacity,2);assert.equal(state.race.players.length,2);}
+  else assert.equal(state.capacity,4);
 });
 
 for(const capacity of [2,6])test(`${capacity} separate credentials can join, place and play asynchronously`,async()=>{
