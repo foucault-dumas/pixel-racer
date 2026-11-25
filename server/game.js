@@ -69,6 +69,13 @@ export function transition(room, body, token) {
     if (doc.race) fail(409, 'La course a commencé : les invitations sont fermées.');
     if (doc.members.length >= doc.capacity) fail(409, 'Tous les Bics sont déjà pris.');
     next.document.members.push({id:doc.members.length,name:nameOf(body.name),tokenHash});
+  } else if (body.action === 'capacity') {
+    if (member.id !== 0) fail(403, 'Seul le créateur peut changer le nombre de places.');
+    if (doc.race) fail(409, 'La course a commencé : le nombre de places est fixé.');
+    if (!Number.isInteger(body.capacity) || body.capacity < 2 || body.capacity > 6) fail(400, 'Choisis de 2 à 6 places, toi compris.');
+    if (body.capacity < doc.members.length) fail(409, 'Impossible de retirer une place déjà occupée.');
+    cleanTrack(doc.track,body.capacity);
+    next.document.capacity = body.capacity;
   } else if (body.action === 'start') {
     if (member.id !== 0) fail(403, 'Seul le créateur peut lancer la course.');
     if (doc.race || doc.members.length !== doc.capacity) fail(409, 'Attends que tous les Bics aient rejoint le cahier.');

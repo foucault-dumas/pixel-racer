@@ -55,7 +55,8 @@ export function makeHandler({store,secret,enabled=true}) {
         if(!validToken(body.invite) || hash(body.invite)!==room.invite_hash)fail(403,'Invitation invalide.');
         // Invitation holders can learn whether joining is possible, without
         // seeing players, moves, the track or any membership credentials.
-        return res.status(200).json({canJoin:!room.document.race && room.document.members.length<room.document.capacity});
+        const reason=room.document.race?'started':room.document.members.length>=room.document.capacity?'full':null;
+        return res.status(200).json({canJoin:!reason,...(reason?{reason}:{})});
       }
       const next = transition(room,body,token);
       if (next === room) return res.status(200).json(snapshot(room,token));

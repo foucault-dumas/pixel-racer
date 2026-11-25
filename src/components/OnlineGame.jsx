@@ -17,6 +17,7 @@ export default function OnlineGame({options,onClose,onRecover,penAudio,soundEnab
   const [data,setData] = useState(null);
   const latest = useRef(null), mounted = useRef(true), lock = useRef(false);
   const [name,setName] = useState(options.name || '');
+  const [capacity,setCapacity] = useState(options.capacity || 2);
   const [busy,setBusy] = useState(false), [error,setError] = useState('');
   const [connection,setConnection] = useState('loading');
   const [view,setView] = useState(options.create?'create':'checking');
@@ -66,7 +67,7 @@ export default function OnlineGame({options,onClose,onRecover,penAudio,soundEnab
       if(nextView==='join') {
         try {
           const invitation=await roomRequest(entry.room,entry.token,{action:'invitation',invite:entry.invite});
-          nextView=invitation.canJoin?'join':'recover';
+          nextView=invitation.canJoin?'join':invitation.reason==='full'?'full':invitation.reason==='started'?'started':'recover';
         } catch(invitationError){nextView='error';message=invitationError.message;}
       }
       if(!mounted.current)return;
@@ -169,21 +170,37 @@ export default function OnlineGame({options,onClose,onRecover,penAudio,soundEnab
       <Notebook {...{track,race,player,phase,zoom,setZoom,help,selected,moveCheck,moves,center,startNodes,selectPoint,keyboard}} error={null} editing={false} draft={[]} notebook={1} tangent={raceTangent(track)}/>
       <aside className="side-panel online-panel">
         <div className="panel-kicker">{!data?'ON OUVRE LE CAHIER':!race?'LES COPAINS ARRIVENT':winner?'LA GLOIRE DE LA RÉCRÉ':myTurn?'À TON TOUR':'LE CAHIER CIRCULE'}</div>
-        <h2 style={{color:player?.color}}>{winner?`${winner.name} gagne !`:data ? myTurn?'À toi de jouer !':player?`À ${player.name} de jouer`:'On attend les Bics…':view==='checking'?'On retrouve ton Bic…':view==='create'?'Inviter les copains':view==='join'?'Première visite ?':'Reprendre la course'}</h2>
+        <h2 style={{color:player?.color}}>{winner?`${winner.name} gagne !`:data ? myTurn?'À toi de jouer !':player?`À ${player.name} de jouer`:'On attend les Bics…':view==='checking'?'On retrouve ton Bic…':view==='create'?'Inviter les copains':view==='join'?'Première visite ?':view==='full'?'Toutes les places sont prises':view==='started'?'La course a déjà commencé':'Reprendre la course'}</h2>
         {!data && view==='checking' && <p className="hint" role="status">Un instant, on vérifie ta place dans ce cahier.</p>}
-        {!data && ['create','join'].includes(view) && <form onSubmit={e=>{e.preventDefault();act(options.create?'create':'join',options.create?{name,capacity:options.capacity,track:options.track,invite:entry.invite}:{name,invite:entry.invite});}}>
-          <p className="hint">{options.create?`Un cahier privé pour ${options.capacity} joueurs. Chacun pourra jouer à son rythme.`:'Ton prénom, un Bic et c’est parti. Pas de compte à créer.'}</p>
+        {!data && ['create','join'].includes(view) && <form onSubmit={e=>{e.preventDefault();act(options.create?'create':'join',options.create?{name,capacity,track:options.track,invite:entry.invite}:{name,invite:entry.invite});}}>
+          <p className="hint">{options.create?`Un cahier privé pour ${capacity} joueurs. Chacun pourra jouer à son rythme.`:'Ton prénom, un Bic et c’est parti. Pas de compte à créer.'}</p>
+          {options.create && <fieldset className="player-count"><legend>Combien de joueurs, toi compris ?</legend>{[2,3,4,5,6].map(n=><button type="button" key={n} disabled={busy} aria-pressed={capacity===n} onClick={()=>setCapacity(n)}>{n}</button>)}</fieldset>}
           {(options.create || entry.invite) && <><label className="online-name">Ton prénom<input required maxLength={20} autoComplete="given-name" value={name} onChange={e=>setName(e.target.value)} placeholder="Charles"/></label><button className="primary" disabled={busy || !name.trim()}>{busy?'On ouvre le cahier…':options.create?'Créer notre cahier ↗':'Rejoindre la course ↗'}</button></>}
         </form>}
+        {!data && ['full','started'].includes(view) && <section className="invitation-status" role="status">
+          <p className="hint">{view==='full'?'Ton invitation est valide, mais le cahier est complet. Le créateur peut ajouter des places avant le départ, jusqu’à six joueurs.':'Ton invitation est valide, mais les nouveaux joueurs ne peuvent plus rejoindre après le départ.'}</p>
+          {view==='full' && <button className="primary" onClick={()=>{setView('checking');refreshRef.current();}}>Vérifier les places disponibles ↗</button>}
+          <button className="text-button" onClick={()=>setView('recover')}>Je participe déjà : retrouver mon Bic</button>
+        </section>}
         {!data && ['join','recover'].includes(view) && <section className="recover-box">
           <h3>{view==='join'?'Tu as déjà joué ?':'Retrouvons ton Bic'}</h3>
           <p>{view==='join'?'Reprends ta place avec ton lien personnel, sans choisir un nouveau prénom.':'Ton Bic n’a pas été reconnu. Ta course peut toujours être enregistrée : il faut ton lien personnel pour reprendre ta place.'}</p>
           <form onSubmit={recover}><label className="online-name">Ton lien personnel<input type="text" autoComplete="off" autoCapitalize="none" spellCheck={false} required value={recoveryLink} onChange={e=>setRecoveryLink(e.target.value)} placeholder="Colle le lien que tu as gardé"/></label><button className="secondary" disabled={!recoveryLink.trim()}>Reprendre avec mon Bic ↗</button></form>
           <p className="small-note">Essaie aussi le navigateur et l’adresse utilisés au départ. En navigation privée, le Bic peut être oublié à la fermeture. Sans ton lien ni le navigateur d’origine, ton prénom seul ne permet pas de récupérer une place.</p>
+          {view==='recover' && entry.invite && !entry.joined && <button className="text-button" onClick={()=>{setView('checking');refreshRef.current();}}>Vérifier mon invitation</button>}
         </section>}
         {data && <>
           <p className="my-pen" style={{color:PENS[data.me].color}}>Ton Bic : {data.members[data.me].name} · {PENS[data.me].label.toLowerCase()}</p>
-          {!race && <><p className="hint">{data.members.length} / {data.capacity} Bics autour du cahier. Le circuit est prêt.</p>{entry.invite && data.me===0 && <button className="primary" onClick={()=>showLink('invite')}>Inviter les copains ↗</button>}<ol className="scoreboard">{data.members.map(p=><li key={p.id} style={{'--pen':PENS[p.id].color}}><span className="ink-dot"/><span>{p.name}{p.id===0?' · créateur':''}</span></li>)}</ol>{data.me===0?<button className="secondary" disabled={!available || data.members.length!==data.capacity} onClick={()=>act('start')}>Tout le monde est là, on joue !</button>:<p className="small-note">Le créateur lancera la course quand tout le monde sera là.</p>}</>}
+          {!race && <>
+            <p className="hint">{data.members.length} / {data.capacity} Bics autour du cahier. Le circuit est prêt.</p>
+            {data.me===0 && <>
+              <fieldset className="player-count"><legend>Nombre de places, toi compris</legend>{[2,3,4,5,6].map(n=><button key={n} aria-pressed={data.capacity===n} disabled={!available || n<data.members.length} onClick={()=>{if(n!==data.capacity)act('capacity',{capacity:n});}}>{n}</button>)}</fieldset>
+              <p className="small-note">{data.members.length===data.capacity && data.capacity<6?'Le cahier est complet. Ajoute des places pour inviter d’autres copains.':'Tu peux ajuster les places avant le départ, sans retirer les joueurs présents.'} Le même lien d’invitation reste valable.</p>
+              {entry.invite && <button className="primary" onClick={()=>showLink('invite')}>Inviter les copains ↗</button>}
+            </>}
+            <ol className="scoreboard">{data.members.map(p=><li key={p.id} style={{'--pen':PENS[p.id].color}}><span className="ink-dot"/><span>{p.name}{p.id===0?' · créateur':''}</span></li>)}</ol>
+            {data.me===0?<button className="secondary" disabled={!available || data.members.length!==data.capacity} onClick={()=>act('start')}>Tout le monde est là, on joue !</button>:<p className="small-note">Le créateur lancera la course quand tout le monde sera là.</p>}
+          </>}
           {race && !winner && !myTurn && <div className="waiting-note"><span aria-hidden="true">✎</span><p>Le Bic est chez {player.name}.<br/>Tu peux fermer cette page et revenir plus tard.</p></div>}
           {myTurn && phase==='placement' && <><p className="hint">Choisis ta place, puis joue ton premier coup dans la foulée.</p><button className="primary" disabled={!available || !startNodes.length || (selected && !startNodes.some(p=>same(p,selected)))} onClick={commit}>Poser mon Bic {selected?'ici':'au départ'} ↗</button></>}
           {myTurn && phase==='playing' && <>
