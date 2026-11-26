@@ -1,6 +1,6 @@
 /* eslint-disable react/prop-types -- Internal screen callbacks. */
 import { useState, useRef, useMemo, useEffect } from 'react';
-import { COLS, ROWS, PENS, point, same, presetTrack, validateTrack, finishAt, raceTangent, startPositions, makeRace, placePlayer, naturalPoint, choices, inspectMove, advanceRace } from '../lib/racing';
+import { COLS, ROWS, PENS, point, same, presetTrack, validateTrack, finishAt, raceTangent, raceStartPositions, makeRace, placePlayer, naturalPoint, choices, inspectMove, advanceRace } from '../lib/racing';
 import Notebook from './Notebook';
 import Rules from './Rules';
 import { resumeLabel } from '../lib/online';
@@ -26,7 +26,7 @@ export default function GameGrid({onOnline, recentRooms=[], onHideRoom}) {
   const player = race?.players[race.active];
   const phase = race?.phase ?? 'setup';
   const error = useMemo(()=>validateTrack(track),[track]);
-  const startNodes = useMemo(()=>phase==='placement'?startPositions(track,race.players.map(p=>p.position).filter(Boolean)):[],[phase,race,track]);
+  const startNodes = useMemo(()=>phase==='placement'?raceStartPositions(track,race.players):[],[phase,race,track]);
   const moves = phase==='playing'?choices(player):[];
   const center = phase==='playing'?naturalPoint(player):null;
   const moveCheck = selected && phase==='playing'?inspectMove(race,selected,track):null;

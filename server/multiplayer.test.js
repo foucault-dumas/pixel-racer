@@ -4,7 +4,7 @@ import { randomBytes, randomUUID } from 'node:crypto';
 import { makeHandler } from './handler.js';
 import { memoryStore } from './memory-store.js';
 import { createRoom, cleanTrack } from './game.js';
-import { point, presetTrack, startPositions, choices, inspectMove, onRoad } from '../src/lib/racing.js';
+import { point, presetTrack, startPositions, raceStartPositions, choices, inspectMove, onRoad } from '../src/lib/racing.js';
 import { normalizeTrack, MAX_BORDER_POINTS, MAX_BORDER_SAMPLES, validateTrack } from '../src/lib/racing.js';
 import { freehandTrack } from '../test/fixtures/freehand-track.js';
 
@@ -29,7 +29,7 @@ function fixture() {
     state=(await call('start',0,{version:state.version})).data;
     while(state.race.players.some(p=>p.turns===0)) {
       const who=state.race.players[state.race.active].id;
-      const p=startPositions(state.track,state.race.players.map(p=>p.position).filter(Boolean))[0];
+      const p=raceStartPositions(state.track,state.race.players)[0];
       const r=await call('place',who,{version:state.version,point:p});
       assert.equal(r.code,200);state=r.data;
       assert.equal(state.race.players[state.race.active].id,who);
@@ -98,6 +98,26 @@ test('invalid invitations, capacity and host authority are enforced',async()=>{
   assert.equal((await f.join(1)).code,200);
 });
 
+test('the server rejects reuse of a vacated starting place without changing the saved race',async()=>{
+  const f=fixture();await f.create();await f.join(1);
+  let state=(await f.call('start',0,{version:1})).data;
+  const driver=state.race.players[state.race.active].id,start=point(30,7);
+  state=(await f.call('place',driver,{version:state.version,point:start})).data;
+  const moved=await f.call('move',driver,{version:state.version,point:point(31,7)});
+  assert.equal(moved.code,200);state=moved.data;
+  const opponent=state.race.players[state.race.active].id;
+  const before=await f.store.get(f.room);
+  assert.equal((await f.call('place',opponent,{version:state.version,point:start})).code,400);
+  assert.deepEqual(await f.store.get(f.room),before);
+  const placed=await f.call('place',opponent,{version:state.version,point:point(30,8)});
+  assert.equal(placed.code,200);
+  assert.equal(placed.data.race.phase,'playing');
+  assert.equal(placed.data.race.players[placed.data.race.active].id,opponent);
+  const saved=(await f.call('read',opponent)).data.race;
+  assert.deepEqual(saved.players.find(p=>p.id===driver).path,[start,point(31,7)]);
+  assert.deepEqual(saved.players.find(p=>p.id===opponent).path,[point(30,8)]);
+});
+
 test('simultaneous joins cannot overbook the last Bic',async()=>{
   const f=fixture();await f.create();
   const results=await Promise.all([f.join(1),f.join(2)]);
@@ -138,7 +158,7 @@ test('a full two-player lobby can expand to four and keep its track, seats and i
   assert.equal(state.race.players.length,4);
   for(let i=0;i<4;i++){
     const driver=state.race.players[state.race.active].id;
-    const p=startPositions(state.track,state.race.players.map(p=>p.position).filter(Boolean))[0];
+    const p=raceStartPositions(state.track,state.race.players)[0];
     state=(await f.call('place',driver,{version:state.version,point:p})).data;
     const moved=await f.call('move',driver,{version:state.version,point:p});
     assert.equal(moved.code,200);state=moved.data;

@@ -4,6 +4,26 @@ import { COLS, ROWS, point, inspectMove } from '../lib/racing';
 const points = ps => ps.map(p=>`${p.x},${p.y}`).join(' ');
 const path = ps => ps.length?`M${ps.map(p=>`${p.x} ${p.y}`).join('L')}Z`:'';
 
+function Car({player,index,active,tangent}) {
+  let direction=tangent;
+  // Keep the last heading when waiting or stopping against a wall.
+  for(let i=player.path.length-1;i>0;i--) {
+    const dx=player.path[i].x-player.path[i-1].x,dy=player.path[i].y-player.path[i-1].y;
+    if(dx || dy){direction={x:dx,y:dy};break;}
+  }
+  const angle=Math.atan2(direction.y,direction.x)*180/Math.PI;
+  return <g className="player-car" transform={`translate(${player.position.x} ${player.position.y})`} style={{color:player.color}} pointerEvents="none" aria-hidden="true">
+    {active && <circle r=".48" fill="none" stroke="currentColor" strokeWidth=".045" opacity=".45"/>}
+    <g transform={`rotate(${angle})`} stroke="currentColor" strokeWidth=".075" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M-.27 -.24h.14m.22 0h.14M-.27 .24h.14m.22 0h.14" strokeWidth=".1"/>
+      <path d="M-.35 -.19Q-.4 0-.35 .19L.19 .2Q.36 .2 .42 .1V-.1Q.36-.2 .19-.2Z" fill="#fbf8ee"/>
+      <path d="M.1-.15L.19-.12V.12L.1 .15ZM-.21-.14L-.16-.16V.16L-.21 .14Z" fill="currentColor" fillOpacity=".3" strokeWidth=".045"/>
+      <circle r=".065" fill="currentColor" stroke="none"/>
+    </g>
+    <text x=".65" y="-.6" className="player-number" fill="currentColor">{index+1}</text>
+  </g>;
+}
+
 export default function Notebook({track,race,player,phase,error,editing,tool,draft,notebook,zoom,setZoom,help,selected,moveCheck,moves,center,startNodes,selectPoint,keyboard,tangent}) {
   const svgRef=useRef(null), drawing=useRef(false), pointerStart=useRef(null);
   const mid=track.finish?point((track.finish.a.x+track.finish.b.x)/2,(track.finish.a.y+track.finish.b.y)/2):null;
@@ -35,13 +55,13 @@ export default function Notebook({track,race,player,phase,error,editing,tool,dra
           <text x={track.finish.a.x+.6} y={track.finish.a.y-1} className="board-note">départ / arrivée</text>
         </g>}
         {!race&&!editing && <g aria-hidden="true"><text x="24" y="20" className="board-title">Le circuit de la récré</text><text x="25" y="22.5" className="board-subtitle">On n’a pas fini de tourner.</text><path d="M25 24Q34 24.7 43 23.8" stroke="#8a9aad" strokeWidth=".08" fill="none"/></g>}
-        {race?.players.map((p,index)=><g key={p.id} style={{color:p.color}}>
+        {race?.players.map(p=><g key={p.id} style={{color:p.color}}>
           <polyline points={points(p.path)} fill="none" stroke="currentColor" strokeWidth=".14" strokeLinejoin="round" strokeLinecap="round"/>
           {p.path.map((q,i)=><circle key={i} cx={q.x} cy={q.y} r=".105" fill="currentColor"/>)}
           {p.crashes.map((q,i)=><path key={i} d={`M${q.x-.3} ${q.y-.3}l.6 .6m0 -.6l-.6 .6`} stroke="currentColor" strokeWidth=".13"/>)}
           {p.previous && <circle cx={p.previous.x} cy={p.previous.y} r=".27" fill="#fbf8ee" stroke="currentColor" strokeWidth=".1"/>}
-          {p.position && <g><circle cx={p.position.x} cy={p.position.y} r={p.id===player.id?'.52':'.4'} fill="#fbf8ee" stroke="currentColor" strokeWidth=".13"/><circle cx={p.position.x} cy={p.position.y} r=".22" fill="currentColor"/><text x={p.position.x+.65} y={p.position.y-.6} className="player-number" fill="currentColor">{index+1}</text></g>}
         </g>)}
+        {race?.players.map((p,index)=>p.position && <Car key={p.id} player={p} index={index} active={p.id===player.id} tangent={tangent}/>)}
         {startNodes.map((p,i)=><circle key={i} cx={p.x} cy={p.y} r=".3" fill={player.color} fillOpacity=".22" stroke={player.color} strokeWidth=".07"/>)}
         {help&&center && <g style={{color:player.color}}>
           <line x1={player.position.x} y1={player.position.y} x2={center.x} y2={center.y} stroke="currentColor" opacity=".5" strokeWidth=".1" strokeDasharray=".25 .2"/>

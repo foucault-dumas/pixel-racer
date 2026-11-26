@@ -31,6 +31,7 @@ La **largeur minimale de la piste** est de **3 cases** en tout point du circuit.
 ### Placement initial des joueurs
 
 - Tous les joueurs se placent **sur** la ligne de départ, chacun sur un nœud de la grille distinct.
+- Un point de départ déjà choisi reste réservé pour le placement, même après le premier déplacement. Il peut être traversé ou atteint pendant les déplacements si aucune voiture ne l’occupe.
 - Les positions de départ sont espacées d'au moins **une case**.
 - Si le nombre de joueurs excède les nœuds disponibles sur la ligne, les joueurs supplémentaires se placent sur une **rangée parallèle** en arrière (côté départ, pas côté arrivée).
 - L'ordre de jeu est déterminé avant le début de la partie (par exemple par tirage au sort).

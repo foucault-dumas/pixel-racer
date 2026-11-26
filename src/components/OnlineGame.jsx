@@ -2,7 +2,7 @@
 import { useEffect, useRef, useState } from 'react';
 import Notebook from './Notebook';
 import Rules from './Rules';
-import { PENS, choices, inspectMove, naturalPoint, raceTangent, startPositions, same, presetTrack } from '../lib/racing';
+import { PENS, choices, inspectMove, naturalPoint, raceTangent, raceStartPositions, same, presetTrack } from '../lib/racing';
 import { newToken, savedRooms, remember, roomLink, roomRequest, parsePersonalLink, resumeView, roomPeople } from '../lib/online';
 import { createTurnObserver } from '../lib/turn-notifications';
 
@@ -31,7 +31,7 @@ export default function OnlineGame({options,onClose,onRecover,penAudio,soundEnab
   const myTurn = !!player && player.id===data.me && phase!=='finished';
   const moves = phase==='playing' && myTurn ? choices(player) : [];
   const center = moves.length ? naturalPoint(player) : null;
-  const startNodes = phase==='placement' && myTurn ? startPositions(track,race.players.map(p=>p.position).filter(Boolean)) : [];
+  const startNodes = phase==='placement' && myTurn ? raceStartPositions(track,race.players) : [];
   const moveCheck = selected && phase==='playing' ? inspectMove(race,selected,track) : null;
   const winner = phase==='finished' ? race.players.find(p=>p.id===race.winner) : null;
   const available = !busy && connection==='ok';
@@ -204,7 +204,7 @@ export default function OnlineGame({options,onClose,onRecover,penAudio,soundEnab
           {race && !winner && !myTurn && <div className="waiting-note"><span aria-hidden="true">✎</span><p>Le Bic est chez {player.name}.<br/>Tu peux fermer cette page et revenir plus tard.</p></div>}
           {myTurn && phase==='placement' && <><p className="hint">Choisis ta place, puis joue ton premier coup dans la foulée.</p><button className="primary" disabled={!available || !startNodes.length || (selected && !startNodes.some(p=>same(p,selected)))} onClick={commit}>Poser mon Bic {selected?'ici':'au départ'} ↗</button></>}
           {myTurn && phase==='playing' && <>
-            <p className="hint">{player.turns===0?'Garde la main : joue ton premier coup maintenant, un carreau maximum.':player.penalty?`Encore ${player.penalty} coups à un carreau maximum.`:'Reporte ton dernier trait. Choisis le point suivant.'}</p>
+            <p className="hint">{player.turns===0?'Garde la main : joue ton premier coup maintenant, un carreau maximum.':player.penalty?`Encore ${player.penalty} coup${player.penalty>1?'s':''} à un carreau maximum.`:'Reporte ton dernier trait. Choisis le point suivant.'}</p>
             {help && <div className="move-pad" aria-label="Les neuf destinations possibles">{moves.map((p,i)=>{const check=inspectMove(race,p,track);return <button key={i} aria-label={`Destination ${p.x}, ${p.y}${check.crash?', sortie de piste':''}`} aria-pressed={same(selected,p)} disabled={!available || !check.valid} className={check.crash?'risky':''} onClick={()=>setSelected(p)}>{['↖','↑','↗','←','•','→','↙','↓','↘'][i]}</button>;})}</div>}
             <p className="selection-note">{selected?`Point choisi : ${selected.x} · ${selected.y}`:'Choisis une intersection du cahier.'}</p>
             {moveCheck && (!moveCheck.valid || moveCheck.crash) && <p className="move-warning">{moveCheck.valid?'Sortie de piste : quatre coups au ralenti.':moveCheck.reason}</p>}
@@ -213,7 +213,7 @@ export default function OnlineGame({options,onClose,onRecover,penAudio,soundEnab
           </>}
           {race && !winner && <label className="toggle"><input type="checkbox" checked={help} onChange={e=>setHelp(e.target.checked)}/><span>Aide au calcul<small>Les neuf points pour retrouver la main.</small></span></label>}
           {winner && <><div className="winner-doodle" aria-hidden="true">★</div><p className="winner-summary">Un tour complet en {winner.turns} coups.<br/>Les traits restent dans ce cahier.</p><button className="primary" onClick={onClose}>Préparer une autre course ↗</button></>}
-          {race && <ol className="scoreboard">{race.players.map((p,i)=><li key={p.id} className={i===race.active?'active':''} style={{'--pen':p.color}}><span className="ink-dot"/><span>{p.name}<small>{p.turns} coups{p.penalty?` · ralenti ${p.penalty}`:''}</small></span>{i===race.active && <b>←</b>}</li>)}</ol>}
+          {race && <ol className="scoreboard">{race.players.map((p,i)=><li key={p.id} className={i===race.active?'active':''} style={{'--pen':p.color}}><span className="ink-dot"/><span>{p.name}<small>{p.turns} coup{p.turns>1?'s':''}{p.penalty?` · ralenti ${p.penalty}`:''}</small></span>{i===race.active && <b>←</b>}</li>)}</ol>}
           <button className="text-button" onClick={()=>showLink('player')}>Retrouver mon lien personnel</button>
         </>}
         {error && <p className="editor-error" role="alert">{error}</p>}

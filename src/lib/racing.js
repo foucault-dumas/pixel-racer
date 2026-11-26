@@ -177,6 +177,11 @@ export function startPositions(track, occupied = []) {
   return [];
 }
 
+export function raceStartPositions(track, players) {
+  // A first move frees the road, but never another player's starting place.
+  return startPositions(track,players.flatMap(player => [player.path[0],player.position]).filter(Boolean));
+}
+
 export function firstBorderHit(a,b,track) {
   let first = null;
   for (const poly of [track.outer,track.inner]) for (const [c,d] of edges(poly)) {
@@ -197,7 +202,7 @@ export function makeRace(names, random = Math.random) {
 
 export function placePlayer(race,p,track) {
   if (race.phase !== 'placement') return race;
-  const options = startPositions(track,race.players.map(player => player.position).filter(Boolean));
+  const options = raceStartPositions(track,race.players);
   if (!options.some(q => same(p,q))) return { ...race, message: 'Choisis un point libre sur la rangée de départ indiquée.' };
   const players = race.players.map((player,i) => i === race.active ? { ...player, position:p, path:[p] } : player);
   return { ...race, players, phase:'playing', message:'Garde ton Bic : joue maintenant ton premier coup, un carreau maximum.' };
